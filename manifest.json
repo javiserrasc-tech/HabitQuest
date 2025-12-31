@@ -1,0 +1,19 @@
+
+{
+  "name": "HabitQuest",
+  "short_name": "HabitQuest",
+  "description": "Tu gestor personal de hábitos con sincronización en la nube.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fffcf0",
+  "theme_color": "#ea580c",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3050/3050212.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
