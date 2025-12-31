@@ -9,15 +9,13 @@ interface HabitCardProps {
   onToggle: (id: number) => void;
   onDelete: (id: number) => void;
   onLogPast: (habit: Habit) => void;
-  onUpdate: (id: number, updates: Partial<Habit>) => void;
+  onEdit: (habit: Habit) => void;
   isCompletedToday: boolean;
 }
 
-const HabitCard: React.FC<HabitCardProps> = ({ habit, userTags, onToggle, onDelete, onLogPast, onUpdate, isCompletedToday }) => {
+const HabitCard: React.FC<HabitCardProps> = ({ habit, userTags, onToggle, onDelete, onLogPast, onEdit, isCompletedToday }) => {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(habit.name);
   
   const timerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -114,15 +112,9 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, userTags, onToggle, onDele
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 overflow-x-auto no-scrollbar">
-            <select 
-              value={habit.category}
-              onChange={(e) => onUpdate(habit.id, { category: e.target.value })}
-              className={`text-[8px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border shrink-0 outline-none appearance-none cursor-pointer ${getTagStyles(habit.category)}`}
-            >
-              {userTags.map(tag => (
-                <option key={tag} value={tag}>{tag}</option>
-              ))}
-            </select>
+            <span className={`text-[8px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border shrink-0 ${getTagStyles(habit.category)}`}>
+              {habit.category}
+            </span>
 
             <span className={`text-[8px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border shrink-0 ${getFrequencyStyle()}`}>
               {getFrequencyLabel()}
@@ -137,28 +129,17 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, userTags, onToggle, onDele
             )}
           </div>
           
-          {isEditing ? (
-            <div className="flex gap-2">
-              <input 
-                autoFocus
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onBlur={() => { onUpdate(habit.id, { name: editName }); setIsEditing(false); }}
-                onKeyDown={(e) => { if(e.key === 'Enter') { onUpdate(habit.id, { name: editName }); setIsEditing(false); } }}
-                className="bg-transparent border-b border-orange-200 outline-none font-bold text-orange-900 text-lg w-full"
-              />
-            </div>
-          ) : (
-            <h3 
-              onClick={() => setIsEditing(true)}
-              className={`font-bold text-orange-900 text-lg leading-tight transition-all truncate cursor-text ${isCompletedToday ? 'opacity-30 line-through' : ''}`}
-            >
-              {habit.name}
-            </h3>
-          )}
+          <h3 
+            className={`font-bold text-orange-900 text-lg leading-tight transition-all truncate ${isCompletedToday ? 'opacity-30 line-through' : ''}`}
+          >
+            {habit.name}
+          </h3>
         </div>
 
         <div className="flex items-center gap-1">
+          <button onClick={(e) => { e.stopPropagation(); onEdit(habit); }} className="text-orange-200 hover:text-orange-500 p-2 transition-colors shrink-0">
+            <Icons.Edit />
+          </button>
           <button onClick={(e) => { e.stopPropagation(); onLogPast(habit); }} className="text-orange-200 hover:text-orange-500 p-2 transition-colors shrink-0">
             <Icons.Calendar />
           </button>

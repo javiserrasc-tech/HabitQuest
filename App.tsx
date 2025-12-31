@@ -29,9 +29,11 @@ const App: React.FC = () => {
   const [userTags, setUserTags] = useState<string[]>([DEFAULT_TAG]);
   const [currentView, setCurrentView] = useState<View>('habits');
   const [analysisPeriod, setAnalysisPeriod] = useState<Period>('weekly');
+  const [expandedHabitId, setExpandedHabitId] = useState<number | null>(null);
   
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isPastDateModalOpen, setIsPastDateModalOpen] = useState(false);
@@ -51,6 +53,9 @@ const App: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [selectedTag, setSelectedTag] = useState(DEFAULT_TAG);
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
+  // Estado para edición de hábito
+  const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
 
   // Gestión de etiquetas
   const [newTagInput, setNewTagInput] = useState('');
@@ -81,16 +86,19 @@ const App: React.FC = () => {
   const isIdTaken = (id: number) => habits.some(h => h.id === id);
   const idInUse = newId !== '' && isIdTaken(parseInt(newId));
 
+  // Lógica central de sincronización (UPSERT)
   const syncToGoogleSheets = async (habit: Habit, valor: number, customDate?: string) => {
     if (!syncUrl) return;
     setIsSyncing(true);
     try {
       const dateOnly = customDate || today;
       const payload = {
+        action: 'upsert', // Indica al script que debe actualizar si ya existe
         id_habito: habit.id,
         nombre_habito: habit.name,
+        categoria: habit.category,
         fecha: dateOnly,
-        valor: valor
+        valor: valor // 1 para completado, 0 para desmarcado
       };
       await fetch(syncUrl, {
         method: 'POST',
@@ -110,7 +118,7 @@ const App: React.FC = () => {
       if (h.id === id) {
         const isCompletedNow = isHabitCompletedCurrentPeriod(h);
         let newCompletedDates = [...h.completedDates];
-        const newVal = isCompletedNow ? 0 : 1;
+        const newVal = isCompletedNow ? 0 : 1; // Si estaba marcado, enviamos 0 para "desmarcar" en Drive
         
         if (isCompletedNow) {
           if (h.frequency === 'daily') newCompletedDates = newCompletedDates.filter(d => d !== today);
@@ -144,6 +152,21 @@ const App: React.FC = () => {
     setHabits(prev => [...prev, newHabit]);
     setIsModalOpen(false);
     setNewId(''); setNewName(''); setSelectedTag(DEFAULT_TAG);
+    
+    // Sincronizar creación (registro inicial sin fecha o con fecha de creación)
+    syncToGoogleSheets(newHabit, 0, today);
+  };
+
+  const handleSaveEdit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editingHabit) return;
+    setHabits(prev => prev.map(h => h.id === editingHabit.id ? editingHabit : h));
+    
+    // Al editar nombre/etiqueta, enviamos un pulso de sincronización
+    syncToGoogleSheets(editingHabit, editingHabit.completedDates.includes(today) ? 1 : 0, today);
+    
+    setIsEditModalOpen(false);
+    setEditingHabit(null);
   };
 
   const isHabitCompletedCurrentPeriod = (habit: Habit) => {
@@ -157,12 +180,76 @@ const App: React.FC = () => {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysToLookBack);
     const cutoffStr = cutoffDate.toISOString().split('T')[0];
-    const totalHabits = habits.length;
-    const completedThisPeriod = habits.filter(isHabitCompletedCurrentPeriod).length;
-    const completionRate = totalHabits > 0 ? (completedThisPeriod / totalHabits) * 100 : 0;
-    const periodCompletions = habits.reduce((acc, h) => acc + h.completedDates.filter(d => d >= cutoffStr).length, 0);
-    return { completedThisPeriod, totalHabits, completionRate, periodCompletions };
+    
+    const totalHabitsCount = habits.length;
+    const completedThisPeriodCount = habits.filter(isHabitCompletedCurrentPeriod).length;
+    const globalCompletionRate = totalHabitsCount > 0 ? (completedThisPeriodCount / totalHabitsCount) * 100 : 0;
+    const totalChecksInPeriod = habits.reduce((acc, h) => acc + h.completedDates.filter(d => d >= cutoffStr).length, 0);
+
+    const habitDetails = habits.map(h => {
+      const completionsInPeriod = h.completedDates.filter(d => d >= cutoffStr).length;
+      let expectedCompletions = daysToLookBack;
+      if (h.frequency === 'weekly') expectedCompletions = Math.ceil(daysToLookBack / 7);
+      if (h.frequency === 'monthly') expectedCompletions = Math.ceil(daysToLookBack / 30);
+      
+      const rate = Math.min(100, Math.round((completionsInPeriod / expectedCompletions) * 100));
+      
+      return {
+        ...h,
+        periodRate: rate,
+        periodChecks: completionsInPeriod
+      };
+    });
+
+    return { 
+      completedThisPeriodCount, 
+      totalHabitsCount, 
+      globalCompletionRate, 
+      totalChecksInPeriod,
+      habitDetails
+    };
   }, [habits, today, analysisPeriod]);
+
+  // Funciones auxiliares para la vista detallada de análisis
+  const getHistoryDaily = (habit: Habit) => {
+    const dates = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const iso = d.toISOString().split('T')[0];
+      dates.push({ date: iso, completed: habit.completedDates.includes(iso), label: d.getDate().toString() });
+    }
+    return dates;
+  };
+
+  const getHistoryWeekly = (habit: Habit) => {
+    const weeks = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - (i * 7));
+      const start = getStartOfWeek(d);
+      const end = new Date(new Date(start).getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const isCompleted = habit.completedDates.some(cd => cd >= start && cd <= end);
+      weeks.push({ start, end, completed: isCompleted, label: `S${12-i}` });
+    }
+    return weeks;
+  };
+
+  const getHistoryMonthly = (habit: Habit) => {
+    const months = [];
+    const monthNames = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const m = d.getMonth();
+      const y = d.getFullYear();
+      const start = new Date(y, m, 1).toISOString().split('T')[0];
+      const end = new Date(y, m + 1, 0).toISOString().split('T')[0];
+      const isCompleted = habit.completedDates.some(cd => cd >= start && cd <= end);
+      months.push({ start, end, completed: isCompleted, label: monthNames[m] });
+    }
+    return months;
+  };
 
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col relative safe-area-inset-top text-orange-950">
@@ -202,11 +289,11 @@ const App: React.FC = () => {
                <div className="relative z-10">
                  <p className="text-[10px] font-bold mb-1 uppercase tracking-widest opacity-60">Progreso del día</p>
                  <div className="flex items-baseline gap-2">
-                   <h2 className="text-5xl font-black">{Math.round(stats.completionRate)}%</h2>
-                   <p className="opacity-70 font-bold">{stats.completedThisPeriod} / {stats.totalHabits}</p>
+                   <h2 className="text-5xl font-black">{Math.round(stats.globalCompletionRate)}%</h2>
+                   <p className="opacity-70 font-bold">{stats.completedThisPeriodCount} / {stats.totalHabitsCount}</p>
                  </div>
                  <div className="mt-6 w-full rounded-full h-3 bg-white/10">
-                    <div className="h-full rounded-full transition-all duration-1000 ease-out bg-orange-300" style={{ width: `${stats.completionRate}%` }} />
+                    <div className="h-full rounded-full transition-all duration-1000 ease-out bg-orange-300" style={{ width: `${stats.globalCompletionRate}%` }} />
                  </div>
                </div>
             </div>
@@ -222,6 +309,7 @@ const App: React.FC = () => {
                     userTags={userTags}
                     isCompletedToday={isHabitCompletedCurrentPeriod(h)} 
                     onToggle={handleToggleHabit} 
+                    onEdit={(habit) => { setEditingHabit({...habit}); setIsEditModalOpen(true); }}
                     onUpdate={handleUpdateHabit}
                     onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))}
                     onLogPast={(habit) => { setSelectedHabitForPastDate(habit); setIsPastDateModalOpen(true); }}
@@ -232,22 +320,127 @@ const App: React.FC = () => {
           </div>
         ) : (
           <div className="px-6 animate-in slide-in-from-right duration-500">
-             <header className="flex items-center justify-between mb-8">
-              <h1 className="text-3xl font-black tracking-tight">Análisis</h1>
-              <div className="flex p-1 rounded-xl bg-black/5">
-                <button onClick={() => setAnalysisPeriod('weekly')} className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-lg ${analysisPeriod === 'weekly' ? 'bg-white shadow-sm text-orange-700' : 'opacity-40'}`}>Semana</button>
-                <button onClick={() => setAnalysisPeriod('monthly')} className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-lg ${analysisPeriod === 'monthly' ? 'bg-white shadow-sm text-orange-700' : 'opacity-40'}`}>Mes</button>
+             <header className="flex flex-col mb-8 gap-4">
+              <div className="flex items-center justify-between">
+                <h1 className="text-3xl font-black tracking-tight text-orange-950">Análisis</h1>
+                <div className="flex p-1 rounded-xl bg-orange-100/50 border border-orange-200">
+                  <button onClick={() => setAnalysisPeriod('weekly')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${analysisPeriod === 'weekly' ? 'bg-orange-700 shadow-md text-white' : 'text-orange-400'}`}>Semana</button>
+                  <button onClick={() => setAnalysisPeriod('monthly')} className={`px-4 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${analysisPeriod === 'monthly' ? 'bg-orange-700 shadow-md text-white' : 'text-orange-400'}`}>Mes</button>
+                </div>
               </div>
             </header>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-6 rounded-[32px] border bg-white/50 border-black/5">
-                <div className="text-3xl font-black">{stats.periodCompletions}</div>
-                <div className="text-[10px] font-black uppercase tracking-widest opacity-40">Checks</div>
+
+            <div className="grid grid-cols-2 gap-4 mb-8">
+              <div className="p-6 rounded-[32px] border-2 border-orange-100 bg-white shadow-sm">
+                <div className="text-3xl font-black text-orange-900">{stats.totalChecksInPeriod}</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-orange-300">Total Checks</div>
               </div>
-              <div className="p-6 rounded-[32px] border bg-white/50 border-black/5">
-                <div className="text-3xl font-black">{habits.length > 0 ? Math.max(...habits.map(h => h.streak), 0) : 0}</div>
-                <div className="text-[10px] font-black uppercase tracking-widest opacity-40">Racha Max</div>
+              <div className="p-6 rounded-[32px] border-2 border-orange-100 bg-white shadow-sm">
+                <div className="text-3xl font-black text-orange-900">{habits.length > 0 ? Math.max(...habits.map(h => h.streak), 0) : 0}</div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-orange-300">Racha Récord</div>
               </div>
+            </div>
+
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-orange-400 mb-4 px-2">Rendimiento por Hábito</h2>
+            <div className="space-y-4 pb-12">
+              {stats.habitDetails.length === 0 ? (
+                <div className="text-center py-10 opacity-30 italic">No hay datos para analizar</div>
+              ) : (
+                stats.habitDetails.map(habit => (
+                  <div 
+                    key={habit.id} 
+                    onClick={() => setExpandedHabitId(expandedHabitId === habit.id ? null : habit.id)}
+                    className={`bg-white border-2 rounded-[28px] p-5 shadow-sm transition-all duration-300 cursor-pointer ${expandedHabitId === habit.id ? 'border-orange-400 ring-4 ring-orange-50' : 'border-orange-50'}`}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${getTagStyles(habit.category)}`}>
+                            {habit.category}
+                          </span>
+                          <span className="text-[10px] font-bold text-orange-500">🔥 {habit.streak}</span>
+                        </div>
+                        <h4 className="font-bold text-orange-900 truncate">{habit.name}</h4>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-black text-orange-700">{habit.periodRate}%</div>
+                        <div className="text-[8px] font-black uppercase text-orange-300 tracking-tighter">Éxito en {analysisPeriod === 'weekly' ? 'semana' : 'mes'}</div>
+                      </div>
+                    </div>
+                    
+                    <div className="h-2 w-full bg-orange-50 rounded-full overflow-hidden mb-2">
+                      <div 
+                        className="h-full bg-orange-600 transition-all duration-1000" 
+                        style={{ width: `${habit.periodRate}%` }}
+                      />
+                    </div>
+                    
+                    <div className="flex justify-between items-center text-[9px] font-bold text-orange-300 uppercase tracking-widest">
+                      <span>Logrados: {habit.periodChecks}</span>
+                      <span>{expandedHabitId === habit.id ? 'Pulsa para cerrar' : 'Pulsa para ver más'}</span>
+                    </div>
+
+                    {expandedHabitId === habit.id && (
+                      <div className="mt-6 pt-6 border-t border-orange-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="mb-4 flex items-center justify-between">
+                          <h5 className="text-[10px] font-black uppercase tracking-widest text-orange-900">
+                            {habit.frequency === 'daily' ? 'Historial Últimos 30 días' : 
+                             habit.frequency === 'weekly' ? 'Historial Últimas 12 semanas' : 
+                             'Historial Últimos 12 meses'}
+                          </h5>
+                        </div>
+                        
+                        <div className="grid grid-cols-6 gap-2">
+                          {habit.frequency === 'daily' && getHistoryDaily(habit).map((item, idx) => (
+                            <div key={idx} className="flex flex-col items-center gap-1">
+                              <div 
+                                className={`w-full aspect-square rounded-lg border-2 flex items-center justify-center transition-colors ${
+                                  item.completed 
+                                    ? 'bg-orange-600 border-orange-600 text-white shadow-sm' 
+                                    : 'bg-orange-50 border-orange-100 text-orange-200'
+                                }`}
+                              >
+                                {item.completed && <Icons.Check />}
+                              </div>
+                              <span className="text-[7px] font-bold opacity-40">{item.label}</span>
+                            </div>
+                          ))}
+
+                          {habit.frequency === 'weekly' && getHistoryWeekly(habit).map((item, idx) => (
+                            <div key={idx} className="flex flex-col items-center gap-1">
+                              <div 
+                                className={`w-full aspect-square rounded-xl border-2 flex items-center justify-center transition-colors ${
+                                  item.completed 
+                                    ? 'bg-orange-600 border-orange-600 text-white shadow-sm' 
+                                    : 'bg-orange-50 border-orange-100 text-orange-200'
+                                }`}
+                              >
+                                {item.completed && <Icons.Check />}
+                              </div>
+                              <span className="text-[7px] font-bold opacity-40">{item.label}</span>
+                            </div>
+                          ))}
+
+                          {habit.frequency === 'monthly' && getHistoryMonthly(habit).map((item, idx) => (
+                            <div key={idx} className="flex flex-col items-center gap-1">
+                              <div 
+                                className={`w-full aspect-square rounded-xl border-2 flex items-center justify-center transition-colors ${
+                                  item.completed 
+                                    ? 'bg-orange-600 border-orange-600 text-white shadow-sm' 
+                                    : 'bg-orange-50 border-orange-100 text-orange-200'
+                                }`}
+                              >
+                                {item.completed ? <Icons.Check /> : <span className="text-[8px] font-black">{item.label}</span>}
+                              </div>
+                              <span className="text-[7px] font-bold opacity-40">{item.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
@@ -263,34 +456,71 @@ const App: React.FC = () => {
           <Icons.Plus />
         </button>
 
-        <button onClick={() => setCurrentView('analysis')} className={`flex flex-col items-center gap-1.5 transition-all ${currentView === 'analysis' ? 'scale-110 opacity-100 text-orange-700' : 'opacity-30'}`}>
+        <button onClick={() => { setCurrentView('analysis'); setExpandedHabitId(null); }} className={`flex flex-col items-center gap-1.5 transition-all ${currentView === 'analysis' ? 'scale-110 opacity-100 text-orange-700' : 'opacity-30'}`}>
           <Icons.Chart />
           <span className="text-[9px] font-black uppercase tracking-widest">Análisis</span>
         </button>
       </nav>
 
-      {isSyncModalOpen && (
-        <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
-          <div className="w-full max-w-md rounded-t-[48px] p-10 shadow-2xl animate-in slide-in-from-bottom duration-500 max-h-[85vh] flex flex-col bg-[#fffcf5]">
-            <h3 className="text-2xl font-black mb-4">Sincronización</h3>
-            <p className="text-sm opacity-60 mb-6 font-medium">Introduce la URL de tu Google Apps Script para guardar datos en Google Sheets.</p>
-            <div className="space-y-4">
-              <input 
-                value={syncUrl} 
-                onChange={e => {
-                  setSyncUrl(e.target.value);
-                  localStorage.setItem(SYNC_URL_KEY, e.target.value);
-                }} 
-                className="w-full px-5 py-4 rounded-2xl border border-black/5 bg-white outline-none font-bold text-sm" 
-                placeholder="https://script.google.com/macros/s/..." 
-              />
-              <button onClick={() => setIsSyncModalOpen(false)} className="w-full py-4 bg-orange-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Guardar Configuración</button>
-              <button onClick={() => setIsSyncModalOpen(false)} className="w-full py-4 opacity-40 font-black uppercase text-[10px]">Cerrar</button>
+      {/* Modal Edición de Hábito */}
+      {isEditModalOpen && editingHabit && (
+        <div className="fixed inset-0 z-[160] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+          <form onSubmit={handleSaveEdit} className="w-full max-w-md rounded-t-[48px] p-10 shadow-2xl animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto bg-[#fffcf5]">
+            <h3 className="text-3xl font-black mb-8 tracking-tight">Editar Hábito</h3>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-1">ID del Hábito (Solo lectura)</p>
+                <div className="w-full px-6 py-4 rounded-[20px] border border-orange-200 bg-orange-50 font-black text-orange-800 shadow-inner">
+                  {editingHabit.id}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-1">Nombre del hábito</p>
+                <input required value={editingHabit.name} onChange={e => setEditingHabit({...editingHabit, name: e.target.value})} className="w-full px-6 py-5 rounded-[24px] border border-black/5 bg-white outline-none font-bold text-orange-950 focus:border-orange-400 transition-all" />
+              </div>
+              
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-1">Etiqueta / Categoría</p>
+                <div className="flex flex-wrap gap-2">
+                  {userTags.map(tag => (
+                    <button 
+                      key={tag}
+                      type="button"
+                      onClick={() => setEditingHabit({...editingHabit, category: tag})}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${editingHabit.category === tag ? 'bg-orange-700 border-orange-700 text-white shadow-md' : 'bg-white border-orange-100 text-orange-300'}`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-1">Frecuencia</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['daily', 'weekly', 'monthly'] as const).map(f => (
+                    <button 
+                      key={f}
+                      type="button"
+                      onClick={() => setEditingHabit({...editingHabit, frequency: f})}
+                      className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${editingHabit.frequency === f ? 'bg-orange-700 border-orange-700 text-white shadow-md' : 'bg-white border-orange-100 text-orange-300'}`}
+                    >
+                      {f === 'daily' ? 'Diario' : f === 'weekly' ? 'Semanal' : 'Mensual'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-6">
+                <button type="button" onClick={() => { setIsEditModalOpen(false); setEditingHabit(null); }} className="flex-1 py-5 opacity-40 font-black uppercase text-[10px]">Cancelar</button>
+                <button type="submit" className="flex-[2] py-5 font-black uppercase text-[10px] rounded-[24px] shadow-lg bg-orange-700 text-white active:scale-95 transition-all">Guardar Cambios</button>
+              </div>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
+      {/* Modal Nuevo Hábito */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
           <form onSubmit={handleAddHabit} className="w-full max-w-md rounded-t-[48px] p-10 shadow-2xl animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto bg-[#fffcf5]">
@@ -351,6 +581,45 @@ const App: React.FC = () => {
               </div>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Modal Sincronización (Drive / Sheets) */}
+      {isSyncModalOpen && (
+        <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+          <div className="w-full max-w-md rounded-t-[48px] p-10 shadow-2xl animate-in slide-in-from-bottom duration-500 max-h-[85vh] flex flex-col bg-[#fffcf5]">
+            <h3 className="text-2xl font-black mb-4">Sincronización Inteligente</h3>
+            <p className="text-sm opacity-60 mb-6 font-medium">Usa "Upsert" para evitar duplicados. Tu script debe buscar por ID y Fecha.</p>
+            <div className="space-y-4">
+              <input 
+                value={syncUrl} 
+                onChange={e => {
+                  setSyncUrl(e.target.value);
+                  localStorage.setItem(SYNC_URL_KEY, e.target.value);
+                }} 
+                className="w-full px-5 py-4 rounded-2xl border border-black/5 bg-white outline-none font-bold text-sm" 
+                placeholder="https://script.google.com/macros/s/..." 
+              />
+              <button 
+                onClick={async () => {
+                   if (!syncUrl) return;
+                   setIsSyncing(true);
+                   for (const habit of habits) {
+                     for (const date of habit.completedDates) {
+                       await syncToGoogleSheets(habit, 1, date);
+                     }
+                   }
+                   setIsSyncing(false);
+                }} 
+                className="w-full py-4 bg-orange-100 text-orange-700 border border-orange-200 rounded-2xl font-black uppercase text-[10px] shadow-sm flex items-center justify-center gap-2"
+              >
+                <Icons.Cloud />
+                Resincronizar todo el historial
+              </button>
+              <button onClick={() => setIsSyncModalOpen(false)} className="w-full py-4 bg-orange-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Guardar Configuración</button>
+              <button onClick={() => setIsSyncModalOpen(false)} className="w-full py-4 opacity-40 font-black uppercase text-[10px]">Cerrar</button>
+            </div>
+          </div>
         </div>
       )}
 
