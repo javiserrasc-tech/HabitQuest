@@ -1,11 +1,11 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Habit } from '../types';
+import { Habit, UserTag } from '../types';
 import { getTagStyles, Icons } from '../constants';
 
 interface HabitCardProps {
   habit: Habit;
-  userTags: string[];
+  userTags: UserTag[];
   onToggle: (id: number) => void;
   onDelete: (id: number) => void;
   onLogPast: (habit: Habit) => void;
@@ -34,6 +34,10 @@ const HabitCard: React.FC<HabitCardProps> = ({
   const timerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
 
+  // Find the tag to get its specific color index
+  const tagData = userTags.find(t => t.name === habit.category);
+  const theme = getTagStyles(habit.category, tagData?.colorIndex);
+
   const getFrequencyLabel = () => {
     switch(habit.frequency) {
       case 'daily': return 'Diario';
@@ -44,12 +48,7 @@ const HabitCard: React.FC<HabitCardProps> = ({
   };
 
   const getFrequencyStyle = () => {
-    switch(habit.frequency) {
-      case 'daily': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'weekly': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'monthly': return 'bg-rose-100 text-rose-800 border-rose-200';
-      default: return 'bg-orange-50 text-orange-500 border-orange-100';
-    }
+    return 'bg-white/40 text-black/60 border-black/5';
   };
 
   const startDeleteTimer = () => {
@@ -113,14 +112,14 @@ const HabitCard: React.FC<HabitCardProps> = ({
   }
 
   return (
-    <div className={`relative bg-[#fffdf5] rounded-[32px] p-6 shadow-md border-2 transition-all duration-500 ${isCompletedToday ? 'border-orange-500/20 bg-orange-50/30' : 'border-orange-100/50'} ${isReorderMode ? 'translate-x-2 border-orange-400' : ''}`}>
+    <div className={`relative rounded-[32px] p-6 shadow-sm border-2 transition-all duration-500 ${theme.card} ${isCompletedToday ? 'opacity-90 grayscale-[0.2] border-black/10' : 'border-transparent'} ${isReorderMode ? 'translate-x-2 border-dashed border-black/20' : ''}`}>
       <div className="flex items-center gap-5">
         {isReorderMode ? (
           <div className="flex flex-col gap-1 shrink-0 animate-in fade-in zoom-in duration-300">
-             <button onClick={onMoveUp} className="w-10 h-10 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center active:bg-orange-200">
+             <button onClick={onMoveUp} className="w-10 h-10 rounded-xl bg-white/60 text-black/60 flex items-center justify-center active:bg-white/80">
                <Icons.Up />
              </button>
-             <button onClick={onMoveDown} className="w-10 h-10 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center active:bg-orange-200">
+             <button onClick={onMoveDown} className="w-10 h-10 rounded-xl bg-white/60 text-black/60 flex items-center justify-center active:bg-white/80">
                <Icons.Down />
              </button>
           </div>
@@ -128,7 +127,7 @@ const HabitCard: React.FC<HabitCardProps> = ({
           <button 
             onClick={() => onToggle(habit.id)} 
             className={`w-14 h-14 rounded-3xl flex items-center justify-center transition-all duration-500 shrink-0 border-2 ${
-              isCompletedToday ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200' : 'bg-orange-50/50 text-orange-200 border-orange-100'
+              isCompletedToday ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200' : 'bg-white/80 text-orange-200 border-white shadow-sm'
             }`}
           >
             {isCompletedToday ? <Icons.Check /> : <div className="w-2 h-2 rounded-full bg-orange-200" />}
@@ -137,7 +136,7 @@ const HabitCard: React.FC<HabitCardProps> = ({
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 overflow-x-auto no-scrollbar">
-            <span className={`text-[8px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border shrink-0 ${getTagStyles(habit.category)}`}>
+            <span className={`text-[8px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border shrink-0 ${theme.tag}`}>
               {habit.category}
             </span>
 
@@ -145,14 +144,14 @@ const HabitCard: React.FC<HabitCardProps> = ({
               {getFrequencyLabel()}
             </span>
             {habit.streak > 0 && (
-              <span className="text-[10px] font-bold text-orange-500 whitespace-nowrap">
+              <span className={`text-[10px] font-bold whitespace-nowrap ${theme.accent}`}>
                 🔥 {habit.streak}
               </span>
             )}
           </div>
           
           <h3 
-            className={`font-bold text-orange-900 text-lg leading-tight transition-all truncate ${isCompletedToday && !isReorderMode ? 'opacity-30 line-through' : ''}`}
+            className={`font-bold text-orange-950 text-lg leading-tight transition-all truncate ${isCompletedToday && !isReorderMode ? 'opacity-40 line-through' : ''}`}
           >
             {habit.name}
           </h3>
@@ -160,13 +159,13 @@ const HabitCard: React.FC<HabitCardProps> = ({
 
         {!isReorderMode && (
           <div className="flex items-center gap-1">
-            <button onClick={(e) => { e.stopPropagation(); onEdit(habit); }} className="text-orange-200 hover:text-orange-500 p-2 transition-colors shrink-0">
+            <button onClick={(e) => { e.stopPropagation(); onEdit(habit); }} className="text-black/20 hover:text-black/60 p-2 transition-colors shrink-0">
               <Icons.Edit />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); onLogPast(habit); }} className="text-orange-200 hover:text-orange-500 p-2 transition-colors shrink-0">
+            <button onClick={(e) => { e.stopPropagation(); onLogPast(habit); }} className="text-black/20 hover:text-black/60 p-2 transition-colors shrink-0">
               <Icons.Calendar />
             </button>
-            <button onClick={(e) => { e.stopPropagation(); setIsConfirmingDelete(true); }} className="text-orange-200 hover:text-red-500 p-2 transition-colors shrink-0">
+            <button onClick={(e) => { e.stopPropagation(); setIsConfirmingDelete(true); }} className="text-black/20 hover:text-rose-500 p-2 transition-colors shrink-0">
               <Icons.Trash />
             </button>
           </div>

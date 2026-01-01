@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Habit } from './types';
-import { Icons, getTagStyles } from './constants';
+import { Habit, UserTag } from './types';
+import { Icons, getTagStyles, COLOR_PALETTE } from './constants';
 import HabitCard from './components/HabitCard';
 
 const STORAGE_KEY = 'habitquest_data_v4';
 const SYNC_URL_KEY = 'habitquest_sync_url';
 const TAGS_KEY = 'habitquest_tags_v4';
-const DEFAULT_TAG = 'General';
+const DEFAULT_TAG: UserTag = { name: 'General', colorIndex: 0 };
 
 type View = 'habits' | 'analysis';
 type Period = 'weekly' | 'monthly';
@@ -35,7 +35,7 @@ const getStartOfMonth = (date: Date) => {
 
 const App: React.FC = () => {
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [userTags, setUserTags] = useState<string[]>([DEFAULT_TAG]);
+  const [userTags, setUserTags] = useState<UserTag[]>([DEFAULT_TAG]);
   const [currentView, setCurrentView] = useState<View>('habits');
   const [analysisPeriod, setAnalysisPeriod] = useState<Period>('weekly');
   const [expandedHabitId, setExpandedHabitId] = useState<number | null>(null);
@@ -56,11 +56,12 @@ const App: React.FC = () => {
   
   const [newId, setNewId] = useState<string>('');
   const [newName, setNewName] = useState('');
-  const [selectedTag, setSelectedTag] = useState(DEFAULT_TAG);
+  const [selectedTagName, setSelectedTagName] = useState(DEFAULT_TAG.name);
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [newTagInput, setNewTagInput] = useState('');
+  const [newTagColorIndex, setNewTagColorIndex] = useState(0);
 
   useEffect(() => {
     const savedHabits = localStorage.getItem(STORAGE_KEY);
@@ -69,7 +70,16 @@ const App: React.FC = () => {
     const savedTags = localStorage.getItem(TAGS_KEY);
     if (savedTags) {
       const parsedTags = JSON.parse(savedTags);
-      setUserTags(parsedTags.length > 0 ? parsedTags : [DEFAULT_TAG]);
+      if (parsedTags.length > 0) {
+        // Asegurar que los indices de color esten dentro del rango de 5 colores
+        const formattedTags = parsedTags.map((t: any) => ({
+          name: typeof t === 'string' ? t : t.name,
+          colorIndex: (t.colorIndex !== undefined ? t.colorIndex : 0) % COLOR_PALETTE.length
+        }));
+        setUserTags(formattedTags);
+      } else {
+        setUserTags([DEFAULT_TAG]);
+      }
     }
   }, []);
 
@@ -98,29 +108,20 @@ const App: React.FC = () => {
   const calculateRate = (habit: Habit, daysBack: number | 'year') => {
     const now = new Date();
     let cutoffDate: Date;
-    
     if (daysBack === 'year') {
       cutoffDate = new Date(now.getFullYear(), 0, 1);
     } else {
       cutoffDate = new Date();
       cutoffDate.setDate(now.getDate() - daysBack);
     }
-    
     const cutoffStr = getLocalDateString(cutoffDate);
     const completions = habit.completedDates.filter(d => d >= cutoffStr).length;
-    
     const diffTime = Math.abs(now.getTime() - cutoffDate.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
-
     let expected = 1;
-    if (habit.frequency === 'daily') {
-      expected = diffDays;
-    } else if (habit.frequency === 'weekly') {
-      expected = Math.ceil(diffDays / 7);
-    } else {
-      expected = Math.ceil(diffDays / 30);
-    }
-
+    if (habit.frequency === 'daily') expected = diffDays;
+    else if (habit.frequency === 'weekly') expected = Math.ceil(diffDays / 7);
+    else expected = Math.ceil(diffDays / 30);
     return Math.min(100, Math.round((completions / expected) * 100));
   };
 
@@ -137,7 +138,6 @@ const App: React.FC = () => {
         fecha: dateOnly,
         valor: valor 
       };
-      
       await fetch(syncUrl, {
         method: 'POST',
         mode: 'no-cors',
@@ -157,7 +157,6 @@ const App: React.FC = () => {
         const isCompletedNow = isHabitCompletedCurrentPeriod(h);
         let newCompletedDates = [...h.completedDates];
         const newVal = isCompletedNow ? 0 : 1; 
-        
         if (isCompletedNow) {
           if (h.frequency === 'daily') newCompletedDates = newCompletedDates.filter(d => d !== today);
           else if (h.frequency === 'weekly') newCompletedDates = newCompletedDates.filter(d => d < startOfCurrentWeek);
@@ -165,9 +164,7 @@ const App: React.FC = () => {
         } else {
           newCompletedDates.push(today);
         }
-
         syncToGoogleSheets(h, newVal);
-
         return { ...h, completedDates: newCompletedDates, streak: !isCompletedNow ? h.streak + 1 : Math.max(0, h.streak - 1) };
       }
       return h;
@@ -183,13 +180,13 @@ const App: React.FC = () => {
     const idNum = parseInt(newId);
     if (isNaN(idNum) || !newName.trim() || isIdTaken(idNum)) return;
     const newHabit: Habit = {
-      id: idNum, name: newName, description: '', category: selectedTag,
+      id: idNum, name: newName, description: '', category: selectedTagName,
       frequency: newFreq, color: '#10b981', completedDates: [],
       createdAt: new Date().toISOString(), streak: 0
     };
     setHabits(prev => [...prev, newHabit]);
     setIsModalOpen(false);
-    setNewId(''); setNewName(''); setSelectedTag(DEFAULT_TAG);
+    setNewId(''); setNewName(''); setSelectedTagName(userTags[0]?.name || DEFAULT_TAG.name);
     syncToGoogleSheets(newHabit, 0, today);
   };
 
@@ -213,16 +210,12 @@ const App: React.FC = () => {
     const totalHabitsCount = habits.length;
     const completedThisPeriodCount = habits.filter(isHabitCompletedCurrentPeriod).length;
     const globalCompletionRate = totalHabitsCount > 0 ? (completedThisPeriodCount / totalHabitsCount) * 100 : 0;
-
-    const habitDetails = habits.map(h => {
-      return { 
+    const habitDetails = habits.map(h => ({ 
         ...h, 
         weekRate: calculateRate(h, 7),
         threeMonthsRate: calculateRate(h, 90),
         yearRate: calculateRate(h, 'year')
-      };
-    });
-
+      }));
     return { completedThisPeriodCount, totalHabitsCount, globalCompletionRate, habitDetails };
   }, [habits, today]);
 
@@ -238,8 +231,7 @@ const App: React.FC = () => {
   const getHistoryDaily = (habit: Habit) => {
     const dates = [];
     for (let i = 29; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
+      const d = new Date(); d.setDate(d.getDate() - i);
       const iso = getLocalDateString(d);
       dates.push({ date: iso, completed: habit.completedDates.includes(iso) });
     }
@@ -249,8 +241,7 @@ const App: React.FC = () => {
   const getHistoryWeekly = (habit: Habit) => {
     const weeks = [];
     for (let i = 11; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - (i * 7));
+      const d = new Date(); d.setDate(d.getDate() - (i * 7));
       const start = getStartOfWeek(d);
       const end = getLocalDateString(new Date(new Date(start).getTime() + 6 * 24 * 60 * 60 * 1000));
       const isCompleted = habit.completedDates.some(cd => cd >= start && cd <= end);
@@ -262,10 +253,8 @@ const App: React.FC = () => {
   const getHistoryMonthly = (habit: Habit) => {
     const months = [];
     for (let i = 11; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const m = d.getMonth();
-      const y = d.getFullYear();
+      const d = new Date(); d.setMonth(d.getMonth() - i);
+      const m = d.getMonth(); const y = d.getFullYear();
       const start = getLocalDateString(new Date(y, m, 1));
       const end = getLocalDateString(new Date(y, m + 1, 0));
       const isCompleted = habit.completedDates.some(cd => cd >= start && cd <= end);
@@ -281,39 +270,29 @@ const App: React.FC = () => {
 
   const renderHabitAnalysis = (habit: Habit) => {
     let history: { completed: boolean }[] = [];
-    let label = "";
-    let sublabel = "";
-    const totalCompletions = habit.completedDates.length;
-
+    let label = ""; let sublabel = "";
     if (habit.frequency === 'daily') {
-      history = getHistoryDaily(habit);
-      label = "Últimos 30 días";
-      const count = history.filter(h => h.completed).length;
-      sublabel = `${count} de 30 completados`;
+      history = getHistoryDaily(habit); label = "Últimos 30 días";
+      sublabel = `${history.filter(h => h.completed).length} de 30 completados`;
     } else if (habit.frequency === 'weekly') {
-      history = getHistoryWeekly(habit);
-      label = "Últimas 12 semanas";
-      const count = history.filter(h => h.completed).length;
-      sublabel = `${count} de 12 completadas`;
+      history = getHistoryWeekly(habit); label = "Últimas 12 semanas";
+      sublabel = `${history.filter(h => h.completed).length} de 12 completadas`;
     } else {
-      history = getHistoryMonthly(habit);
-      label = "Últimos 12 meses";
-      const count = history.filter(h => h.completed).length;
-      sublabel = `${count} de 12 completados`;
+      history = getHistoryMonthly(habit); label = "Últimos 12 meses";
+      sublabel = `${history.filter(h => h.completed).length} de 12 completados`;
     }
-
     return (
-      <div className="mt-6 pt-6 border-t border-orange-100 animate-in fade-in slide-in-from-top-2">
+      <div className="mt-6 pt-6 border-t border-black/5 animate-in fade-in slide-in-from-top-2">
         <div className="flex justify-between items-end mb-4">
           <div>
-            <p className="text-[10px] font-black uppercase text-orange-400 tracking-wider mb-0.5">{label}</p>
-            <p className="text-xs font-bold text-orange-700">{sublabel}</p>
+            <p className="text-[10px] font-black uppercase text-black/30 tracking-wider mb-0.5">{label}</p>
+            <p className="text-xs font-bold text-black/60">{sublabel}</p>
           </div>
-          <p className="text-[9px] font-bold text-orange-300">Total histórico: {totalCompletions}</p>
+          <p className="text-[9px] font-bold text-black/20">Total: {habit.completedDates.length}</p>
         </div>
         <div className="grid grid-cols-6 gap-2.5">
            {history.map((item, idx) => (
-              <div key={idx} className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all ${item.completed ? 'bg-orange-600 border-orange-600 text-white' : 'bg-orange-50 border-orange-100 text-orange-200'}`}>
+              <div key={idx} className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all ${item.completed ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-white/40 border-black/5 text-black/10'}`}>
                 {item.completed && <Icons.Check />}
               </div>
             ))}
@@ -324,7 +303,6 @@ const App: React.FC = () => {
 
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col relative safe-area-inset-top text-orange-950">
-      
       {isSyncing && (
         <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[100] bg-orange-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-in fade-in zoom-in duration-300">
           <div className="w-2 h-2 bg-orange-300 rounded-full animate-pulse"></div>
@@ -334,19 +312,16 @@ const App: React.FC = () => {
 
       <div className="px-6 pt-8 flex justify-between items-start mb-2">
         <div className="flex gap-2">
-          <button onClick={() => setIsTagManagerOpen(true)} className="p-3 rounded-2xl border bg-orange-100/50 border-orange-200 text-orange-600 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
+          <button onClick={() => setIsTagManagerOpen(true)} className="p-3 rounded-2xl border bg-white/60 border-black/5 text-black/60 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
             <Icons.Settings />
             <span className="text-[10px] font-black uppercase tracking-wider">Etiquetas</span>
           </button>
-          <button 
-            onClick={() => setIsReorderMode(!isReorderMode)} 
-            className={`p-3 rounded-2xl border shadow-sm flex items-center gap-2 active:scale-95 transition-all ${isReorderMode ? 'bg-orange-600 text-white border-orange-600' : 'bg-orange-100/50 border-orange-200 text-orange-600'}`}
-          >
+          <button onClick={() => setIsReorderMode(!isReorderMode)} className={`p-3 rounded-2xl border shadow-sm flex items-center gap-2 active:scale-95 transition-all ${isReorderMode ? 'bg-orange-600 text-white border-orange-600' : 'bg-white/60 border-black/5 text-black/60'}`}>
             <Icons.Move />
             <span className="text-[10px] font-black uppercase tracking-wider">{isReorderMode ? 'Hecho' : 'Mover'}</span>
           </button>
         </div>
-        <button onClick={() => setIsSyncModalOpen(true)} className={`p-3 rounded-2xl transition-all shadow-sm border ${syncUrl ? 'text-orange-700 bg-orange-100 border-orange-200' : 'opacity-30'}`}>
+        <button onClick={() => setIsSyncModalOpen(true)} className={`p-3 rounded-2xl transition-all shadow-sm border ${syncUrl ? 'text-black/60 bg-white/60 border-black/5' : 'opacity-30'}`}>
           <Icons.Cloud />
         </button>
       </div>
@@ -355,10 +330,9 @@ const App: React.FC = () => {
         {currentView === 'habits' ? (
           <div className="px-6 animate-in fade-in duration-500">
             <header className="mb-8">
-              <h1 className="text-3xl font-black tracking-tight">Mis Hábitos</h1>
+              <h1 className="text-3xl font-black tracking-tight">HabitQuest</h1>
               <p className="font-medium opacity-60 uppercase text-[10px] tracking-widest">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
             </header>
-
             {!isReorderMode && (
               <div className="mb-8 rounded-[32px] p-7 shadow-xl relative overflow-hidden bg-orange-700 text-orange-50 animate-in zoom-in duration-300">
                 <div className="relative z-10">
@@ -373,26 +347,12 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-
             <section className="space-y-4">
               {habits.length === 0 ? (
                 <div className="text-center py-20 opacity-40 italic">Nada por aquí aún... pulsa +</div>
               ) : (
                 habits.map((h, idx) => (
-                  <HabitCard 
-                    key={h.id} 
-                    habit={h}
-                    userTags={userTags}
-                    isCompletedToday={isHabitCompletedCurrentPeriod(h)} 
-                    onToggle={handleToggleHabit} 
-                    onEdit={(habit) => { setEditingHabit({...habit}); setIsEditModalOpen(true); }}
-                    onUpdate={handleUpdateHabit}
-                    onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))}
-                    onLogPast={(habit) => { setSelectedHabitForPastDate(habit); setIsPastDateModalOpen(true); }}
-                    isReorderMode={isReorderMode}
-                    onMoveUp={() => moveHabit(idx, 'up')}
-                    onMoveDown={() => moveHabit(idx, 'down')}
-                  />
+                  <HabitCard key={h.id} habit={h} userTags={userTags} isCompletedToday={isHabitCompletedCurrentPeriod(h)} onToggle={handleToggleHabit} onEdit={(habit) => { setEditingHabit({...habit}); setIsEditModalOpen(true); }} onUpdate={handleUpdateHabit} onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} onLogPast={(habit) => { setSelectedHabitForPastDate(habit); setIsPastDateModalOpen(true); }} isReorderMode={isReorderMode} onMoveUp={() => moveHabit(idx, 'up')} onMoveDown={() => moveHabit(idx, 'down')} />
                 ))
               )}
             </section>
@@ -401,68 +361,58 @@ const App: React.FC = () => {
           <div className="px-6 animate-in slide-in-from-right duration-500">
              <header className="mb-8">
                 <h1 className="text-3xl font-black tracking-tight text-orange-950">Análisis</h1>
-                <p className="text-[10px] font-black uppercase text-orange-400 tracking-widest mt-1">Rendimiento Histórico</p>
+                <p className="text-[10px] font-black uppercase text-black/30 tracking-widest mt-1">Rendimiento Histórico</p>
              </header>
              <div className="space-y-4 pb-12">
-              {stats.habitDetails.map(habit => (
-                <div key={habit.id} onClick={() => setExpandedHabitId(expandedHabitId === habit.id ? null : habit.id)} className={`bg-[#fffdf5] border-2 rounded-[32px] p-6 shadow-sm cursor-pointer transition-all duration-300 ${expandedHabitId === habit.id ? 'border-orange-500 bg-orange-50/20 shadow-lg' : 'border-orange-100/50'}`}>
-                  <div className="flex flex-col gap-5">
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-black text-orange-900 truncate text-lg mb-1">{habit.name}</h4>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[8px] font-black uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-md border shrink-0 ${getTagStyles(habit.category)}`}>
-                          {habit.category}
-                        </span>
-                        <span className="text-[8px] opacity-40 uppercase font-black tracking-widest">
-                          {habit.frequency === 'daily' ? 'Diario' : habit.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
-                        </span>
+              {stats.habitDetails.map(habit => {
+                const tagData = userTags.find(t => t.name === habit.category);
+                const theme = getTagStyles(habit.category, tagData?.colorIndex);
+                return (
+                  <div key={habit.id} onClick={() => setExpandedHabitId(expandedHabitId === habit.id ? null : habit.id)} className={`border-2 rounded-[32px] p-6 shadow-sm cursor-pointer transition-all duration-300 ${theme.card} ${expandedHabitId === habit.id ? 'shadow-lg border-black/10' : 'border-transparent'}`}>
+                    <div className="flex flex-col gap-5">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-black text-orange-950 truncate text-lg mb-1">{habit.name}</h4>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[8px] font-black uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-md border shrink-0 ${theme.tag}`}>
+                            {habit.category}
+                          </span>
+                          <span className="text-[8px] opacity-40 uppercase font-black tracking-widest">
+                            {habit.frequency === 'daily' ? 'Diario' : habit.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        {[{l:'Semana', r: habit.weekRate}, {l:'3 Meses', r: habit.threeMonthsRate}, {l:'Año', r: habit.yearRate}].map((s, i) => (
+                          <div key={i} className="bg-white/60 border border-white rounded-2xl p-3 flex flex-col items-center shadow-sm">
+                            <span className="text-[8px] font-black uppercase text-black/30 mb-1">{s.l}</span>
+                            <span className={`text-lg font-black ${theme.accent}`}>{s.r}%</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-white/50 border border-orange-100 rounded-2xl p-3 flex flex-col items-center">
-                        <span className="text-[8px] font-black uppercase text-orange-300 mb-1">Semana</span>
-                        <span className="text-lg font-black text-orange-700">{habit.weekRate}%</span>
-                      </div>
-                      <div className="bg-white/50 border border-orange-100 rounded-2xl p-3 flex flex-col items-center">
-                        <span className="text-[8px] font-black uppercase text-orange-300 mb-1">3 Meses</span>
-                        <span className="text-lg font-black text-orange-700">{habit.threeMonthsRate}%</span>
-                      </div>
-                      <div className="bg-white/50 border border-orange-100 rounded-2xl p-3 flex flex-col items-center">
-                        <span className="text-[8px] font-black uppercase text-orange-300 mb-1">Año</span>
-                        <span className="text-lg font-black text-orange-700">{habit.yearRate}%</span>
-                      </div>
-                    </div>
+                    {expandedHabitId === habit.id && renderHabitAnalysis(habit)}
                   </div>
-                  {expandedHabitId === habit.id && renderHabitAnalysis(habit)}
-                </div>
-              ))}
-              {habits.length === 0 && (
-                <div className="text-center py-20 opacity-40 italic">Crea hábitos para ver estadísticas.</div>
-              )}
+                );
+              })}
+              {habits.length === 0 && <div className="text-center py-20 opacity-40 italic">Crea hábitos para ver estadísticas.</div>}
              </div>
           </div>
         )}
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto backdrop-blur-xl border-t px-12 py-5 flex justify-between items-center z-40 rounded-t-[32px] shadow-2xl bg-orange-50/80 border-orange-100">
+      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto backdrop-blur-xl border-t px-12 py-5 flex justify-between items-center z-40 rounded-t-[32px] shadow-2xl bg-white/80 border-black/5">
         <button onClick={() => setCurrentView('habits')} className={`flex flex-col items-center gap-1.5 transition-all ${currentView === 'habits' ? 'scale-110 text-orange-700' : 'opacity-30'}`}>
-          <Icons.Target />
-          <span className="text-[9px] font-black uppercase">Hábitos</span>
+          <Icons.Target /><span className="text-[9px] font-black uppercase">Hábitos</span>
         </button>
-        <button onClick={() => { 
-          setNewId(String(getFirstAvailableId()));
-          setIsModalOpen(true); 
-        }} className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl bg-orange-700 text-white -mt-10 border-4 border-orange-50">
+        <button onClick={() => { setNewId(String(getFirstAvailableId())); setIsModalOpen(true); }} className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl bg-orange-700 text-white -mt-10 border-4 border-white">
           <Icons.Plus />
         </button>
         <button onClick={() => { setCurrentView('analysis'); setExpandedHabitId(null); }} className={`flex flex-col items-center gap-1.5 transition-all ${currentView === 'analysis' ? 'scale-110 text-orange-700' : 'opacity-30'}`}>
-          <Icons.Chart />
-          <span className="text-[9px] font-black uppercase">Análisis</span>
+          <Icons.Chart /><span className="text-[9px] font-black uppercase">Análisis</span>
         </button>
       </nav>
 
-      {/* MODAL NUEVO HÁBITO */}
+      {/* MODALES */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
           <form onSubmit={handleAddHabit} className="w-full max-w-md rounded-t-[48px] p-10 shadow-2xl animate-in slide-in-from-bottom duration-500 max-h-[90vh] overflow-y-auto bg-[#fffcf5]">
@@ -476,26 +426,24 @@ const App: React.FC = () => {
                 <p className="text-[10px] font-black uppercase opacity-40 ml-1">Nombre</p>
                 <input required value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-6 py-5 rounded-[24px] border border-black/5 bg-white font-bold" placeholder="¿Qué harás hoy?" />
               </div>
-              
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-1">Etiqueta</p>
                 <div className="flex flex-wrap gap-2">
-                  {userTags.map(tag => (
-                    <button key={tag} type="button" onClick={() => setSelectedTag(tag)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${selectedTag === tag ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-orange-100 text-orange-300'}`}>{tag}</button>
-                  ))}
-                  <button type="button" onClick={() => setIsTagManagerOpen(true)} className="px-4 py-2 rounded-xl text-[10px] font-black uppercase border-2 border-dashed border-orange-200 text-orange-300">+</button>
+                  {userTags.map(tag => {
+                    const theme = getTagStyles(tag.name, tag.colorIndex);
+                    return <button key={tag.name} type="button" onClick={() => setSelectedTagName(tag.name)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${selectedTagName === tag.name ? 'bg-orange-700 border-orange-700 text-white shadow-sm' : `${theme.tag} border-transparent`}`}>{tag.name}</button>;
+                  })}
+                  <button type="button" onClick={() => setIsTagManagerOpen(true)} className="px-4 py-2 rounded-xl text-[10px] font-black uppercase border-2 border-dashed border-black/10 text-black/20">+</button>
                 </div>
               </div>
-
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-1">Frecuencia</p>
                 <div className="grid grid-cols-3 gap-2">
                   {(['daily', 'weekly', 'monthly'] as const).map(f => (
-                    <button key={f} type="button" onClick={() => setNewFreq(f)} className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${newFreq === f ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-orange-100 text-orange-300'}`}>{f === 'daily' ? 'Día' : f === 'weekly' ? 'Sem' : 'Mes'}</button>
+                    <button key={f} type="button" onClick={() => setNewFreq(f)} className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${newFreq === f ? 'bg-orange-700 border-orange-700 text-white shadow-md' : 'bg-white border-black/5 text-black/20'}`}>{f === 'daily' ? 'Día' : f === 'weekly' ? 'Sem' : 'Mes'}</button>
                   ))}
                 </div>
               </div>
-
               <div className="flex gap-4 pt-6">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-5 opacity-40 font-black uppercase text-[10px]">Cerrar</button>
                 <button type="submit" disabled={idInUse || !newId || !newName} className="flex-[2] py-5 font-black uppercase text-[10px] rounded-[24px] shadow-lg bg-orange-700 text-white">Crear</button>
@@ -505,7 +453,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL EDITAR HÁBITO */}
       {isEditModalOpen && editingHabit && (
         <div className="fixed inset-0 z-[160] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
           <form onSubmit={handleSaveEdit} className="w-full max-w-md rounded-t-[48px] p-10 shadow-2xl bg-[#fffcf5]">
@@ -518,9 +465,10 @@ const App: React.FC = () => {
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-1">Etiqueta</p>
                 <div className="flex flex-wrap gap-2">
-                  {userTags.map(tag => (
-                    <button key={tag} type="button" onClick={() => setEditingHabit({...editingHabit, category: tag})} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${editingHabit.category === tag ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-orange-100 text-orange-300'}`}>{tag}</button>
-                  ))}
+                  {userTags.map(tag => {
+                    const theme = getTagStyles(tag.name, tag.colorIndex);
+                    return <button key={tag.name} type="button" onClick={() => setEditingHabit({...editingHabit, category: tag.name})} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${editingHabit.category === tag.name ? 'bg-orange-700 border-orange-700 text-white' : `${theme.tag} border-transparent`}`}>{tag.name}</button>;
+                  })}
                 </div>
               </div>
               <div className="flex gap-4 pt-6">
@@ -532,71 +480,66 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL TAG MANAGER */}
       {isTagManagerOpen && (
         <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
-          <div className="w-full max-w-md rounded-t-[48px] p-10 shadow-2xl bg-[#fffcf5]">
-            <h3 className="text-2xl font-black mb-6">Etiquetas</h3>
-            <div className="flex gap-2 mb-6">
-              <input value={newTagInput} onChange={e => setNewTagInput(e.target.value)} className="flex-1 px-5 py-4 rounded-2xl border border-black/5 bg-white font-bold" placeholder="Nueva..." />
-              <button onClick={() => { if(newTagInput) { setUserTags(p => [...p, newTagInput]); setNewTagInput(''); } }} className="px-6 font-black rounded-2xl text-[10px] bg-orange-700 text-white uppercase">Añadir</button>
-            </div>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {userTags.map((t) => (
-                <div key={t} className="flex items-center justify-between p-4 bg-orange-50 rounded-2xl border border-orange-100/50">
-                   <span className="font-bold text-sm text-orange-900">{t}</span>
-                   <button onClick={() => { if(userTags.length > 1) setUserTags(p => p.filter(x => x !== t)); }} className="text-orange-300 hover:text-rose-500"><Icons.Trash /></button>
+          <div className="w-full max-w-md rounded-t-[48px] p-10 shadow-2xl bg-[#fffcf5] max-h-[90vh] overflow-y-auto">
+            <h3 className="text-2xl font-black mb-6">Gestionar Etiquetas</h3>
+            <div className="space-y-4 mb-6">
+              <input value={newTagInput} onChange={e => setNewTagInput(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-black/5 bg-white font-bold" placeholder="Nombre..." />
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-1">Color (5 opciones claras)</p>
+                <div className="flex gap-3 pb-2">
+                  {COLOR_PALETTE.map((color, i) => (
+                    <button key={i} type="button" onClick={() => setNewTagColorIndex(i)} className={`w-12 h-12 rounded-2xl shrink-0 border-4 transition-all ${newTagColorIndex === i ? 'border-orange-700 scale-110 shadow-md' : 'border-white'} ${color.bg}`} />
+                  ))}
                 </div>
-              ))}
+              </div>
+              <button onClick={() => { if(newTagInput) { setUserTags(p => [...p, { name: newTagInput, colorIndex: newTagColorIndex }]); setNewTagInput(''); } }} className="w-full py-4 font-black rounded-2xl text-[10px] bg-orange-700 text-white uppercase shadow-lg">Añadir Etiqueta</button>
             </div>
-            <button onClick={() => setIsTagManagerOpen(false)} className="mt-6 py-4 opacity-40 text-xs font-black uppercase w-full">Cerrar</button>
+            <div className="space-y-2">
+              <p className="text-[10px] font-black uppercase opacity-40 ml-1">Tus Etiquetas</p>
+              {userTags.map((t) => {
+                const theme = getTagStyles(t.name, t.colorIndex);
+                return (
+                  <div key={t.name} className={`flex items-center justify-between p-4 rounded-2xl border ${theme.card}`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-4 h-4 rounded-lg shadow-sm ${COLOR_PALETTE[t.colorIndex].bg}`} />
+                      <span className="font-bold text-sm text-orange-950">{t.name}</span>
+                    </div>
+                    <button onClick={() => { if(userTags.length > 1) setUserTags(p => p.filter(x => x.name !== t.name)); }} className="text-black/10 hover:text-rose-500 p-2"><Icons.Trash /></button>
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={() => setIsTagManagerOpen(false)} className="mt-8 py-4 opacity-40 text-xs font-black uppercase w-full">Cerrar</button>
           </div>
         </div>
       )}
 
-      {/* MODAL SINCRONIZACIÓN */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
           <div className="w-full max-w-md rounded-t-[48px] p-8 shadow-2xl flex flex-col bg-[#fffcf5] overflow-y-auto max-h-[90vh]">
-            <h3 className="text-2xl font-black mb-4 tracking-tight">Sincronización</h3>
-            <p className="text-xs opacity-60 mb-6 font-medium">Configura la URL de tu Google Web App para sincronizar tus hábitos.</p>
-            
+            <h3 className="text-2xl font-black mb-4 tracking-tight text-center">Nube</h3>
             <div className="space-y-4 mb-6">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black uppercase opacity-40 ml-1">URL de Google Web App</p>
-                <input 
-                  value={syncUrl} 
-                  onChange={e => setSyncUrl(e.target.value)} 
-                  className="w-full px-5 py-4 rounded-2xl border border-black/5 bg-white outline-none font-bold text-xs" 
-                  placeholder="https://script.google.com/macros/s/..." 
-                />
-              </div>
-
-              <button 
-                onClick={handleSaveSyncUrl} 
-                className="w-full py-4 bg-orange-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all"
-              >
-                Guardar URL
-              </button>
+              <input value={syncUrl} onChange={e => setSyncUrl(e.target.value)} className="w-full px-5 py-4 rounded-2xl border border-black/5 bg-white font-bold text-xs" placeholder="URL Google App Script" />
+              <button onClick={handleSaveSyncUrl} className="w-full py-4 bg-orange-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Guardar Configuración</button>
             </div>
-
             <button onClick={() => setIsSyncModalOpen(false)} className="py-2 opacity-40 font-black uppercase text-[10px] w-full text-center">Cerrar</button>
           </div>
         </div>
       )}
 
-      {/* MODAL REGISTRO PASADO */}
       {isPastDateModalOpen && selectedHabitForPastDate && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6">
-          <div className="w-full max-w-xs bg-[#fffcf5] rounded-[40px] p-8">
-            <h3 className="text-xl font-black mb-4">Registro Pasado</h3>
-            <input type="date" value={pastDateToLog} max={today} onChange={e => setPastDateToLog(e.target.value)} className="w-full p-4 rounded-2xl border mb-4 font-bold" />
+          <div className="w-full max-w-xs bg-[#fffcf5] rounded-[40px] p-8 shadow-2xl">
+            <h3 className="text-xl font-black mb-4 text-center">Log Histórico</h3>
+            <input type="date" value={pastDateToLog} max={today} onChange={e => setPastDateToLog(e.target.value)} className="w-full p-4 rounded-2xl border mb-4 font-bold border-black/5 bg-white text-center" />
             <div className="flex p-1 bg-black/5 rounded-2xl mb-6">
-               <button onClick={() => setIsPastDateCompleted(true)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${isPastDateCompleted ? 'bg-orange-600 text-white' : 'opacity-40'}`}>Hecho</button>
-               <button onClick={() => setIsPastDateCompleted(false)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${!isPastDateCompleted ? 'bg-orange-600 text-white' : 'opacity-40'}`}>No</button>
+               <button onClick={() => setIsPastDateCompleted(true)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${isPastDateCompleted ? 'bg-orange-600 text-white shadow-sm' : 'opacity-40'}`}>Hecho</button>
+               <button onClick={() => setIsPastDateCompleted(false)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${!isPastDateCompleted ? 'bg-orange-600 text-white shadow-sm' : 'opacity-40'}`}>No</button>
             </div>
             <div className="flex gap-2">
-               <button onClick={() => setIsPastDateModalOpen(false)} className="flex-1 text-[10px]">Cerrar</button>
+               <button onClick={() => setIsPastDateModalOpen(false)} className="flex-1 text-[10px] font-black uppercase opacity-40">Atrás</button>
                <button onClick={() => {
                  setHabits(prev => prev.map(h => {
                    if (h.id === selectedHabitForPastDate.id) {
@@ -608,7 +551,7 @@ const App: React.FC = () => {
                    return h;
                  }));
                  setIsPastDateModalOpen(false);
-               }} className="flex-[2] py-4 bg-orange-700 text-white rounded-2xl text-[10px] font-black uppercase">Guardar</button>
+               }} className="flex-[2] py-4 bg-orange-700 text-white rounded-2xl text-[10px] font-black uppercase shadow-lg">Registrar</button>
             </div>
           </div>
         </div>

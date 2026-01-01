@@ -1,25 +1,59 @@
 
 import React from 'react';
 
-const WARM_TAGS = [
-  'bg-orange-100 text-orange-700 border-orange-200',
-  'bg-amber-100 text-amber-700 border-amber-200',
-  'bg-rose-100 text-rose-700 border-rose-200',
-  'bg-yellow-100 text-yellow-700 border-yellow-200'
+export const COLOR_PALETTE = [
+  { // Soft Amber
+    id: 0,
+    tag: 'bg-amber-100 text-amber-800 border-amber-200',
+    card: 'bg-amber-50/50 border-amber-100',
+    accent: 'text-amber-600',
+    bg: 'bg-amber-300'
+  },
+  { // Sky Blue
+    id: 1,
+    tag: 'bg-blue-100 text-blue-800 border-blue-200',
+    card: 'bg-blue-50/50 border-blue-100',
+    accent: 'text-blue-600',
+    bg: 'bg-blue-300'
+  },
+  { // Sage Green
+    id: 2,
+    tag: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    card: 'bg-emerald-50/50 border-emerald-100',
+    accent: 'text-emerald-600',
+    bg: 'bg-emerald-300'
+  },
+  { // Soft Lavender
+    id: 3,
+    tag: 'bg-violet-100 text-violet-800 border-violet-200',
+    card: 'bg-violet-50/50 border-violet-100',
+    accent: 'text-violet-600',
+    bg: 'bg-violet-300'
+  },
+  { // Pale Rose
+    id: 4,
+    tag: 'bg-rose-100 text-rose-800 border-rose-200',
+    card: 'bg-rose-50/50 border-rose-100',
+    accent: 'text-rose-600',
+    bg: 'bg-rose-300'
+  }
 ];
 
-export const getTagStyles = (tag: string) => {
+export const getTagStyles = (tag: string, forcedIndex?: number) => {
+  if (forcedIndex !== undefined && forcedIndex >= 0 && forcedIndex < COLOR_PALETTE.length) {
+    return COLOR_PALETTE[forcedIndex];
+  }
   let hash = 0;
   for (let i = 0; i < tag.length; i++) {
     hash = tag.charCodeAt(i) + ((hash << 5) - hash);
   }
-  const index = Math.abs(hash) % WARM_TAGS.length;
-  return WARM_TAGS[index];
+  const index = Math.abs(hash) % COLOR_PALETTE.length;
+  return COLOR_PALETTE[index];
 };
 
 export const Icons = {
   Plus: () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
   ),
   Check: () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>

@@ -1,9 +1,14 @@
 
+export interface UserTag {
+  name: string;
+  colorIndex: number;
+}
+
 export interface Habit {
-  id: number; // Identificador entero manual
+  id: number;
   name: string;
   description: string;
-  category: string; // Etiqueta personalizada por el usuario
+  category: string; // Refers to UserTag.name
   frequency: 'daily' | 'weekly' | 'monthly';
   color: string;
   completedDates: string[]; // ISO Strings YYYY-MM-DD
