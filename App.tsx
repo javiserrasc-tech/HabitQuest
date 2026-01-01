@@ -352,7 +352,8 @@ const App: React.FC = () => {
                 <div className="text-center py-20 opacity-40 italic">Nada por aquí aún... pulsa +</div>
               ) : (
                 habits.map((h, idx) => (
-                  <HabitCard key={h.id} habit={h} userTags={userTags} isCompletedToday={isHabitCompletedCurrentPeriod(h)} onToggle={handleToggleHabit} onEdit={(habit) => { setEditingHabit({...habit}); setIsEditModalOpen(true); }} onUpdate={handleUpdateHabit} onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} onLogPast={(habit) => { setSelectedHabitForPastDate(habit); setIsPastDateModalOpen(true); }} isReorderMode={isReorderMode} onMoveUp={() => moveHabit(idx, 'up')} onMoveDown={() => moveHabit(idx, 'down')} />
+                  /* Fixed: removed onUpdate prop which was causing a type error as it's not defined in HabitCardProps */
+                  <HabitCard key={h.id} habit={h} userTags={userTags} isCompletedToday={isHabitCompletedCurrentPeriod(h)} onToggle={handleToggleHabit} onEdit={(habit) => { setEditingHabit({...habit}); setIsEditModalOpen(true); }} onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} onLogPast={(habit) => { setSelectedHabitForPastDate(habit); setIsPastDateModalOpen(true); }} isReorderMode={isReorderMode} onMoveUp={() => moveHabit(idx, 'up')} onMoveDown={() => moveHabit(idx, 'down')} />
                 ))
               )}
             </section>

@@ -113,7 +113,7 @@ const HabitCard: React.FC<HabitCardProps> = ({
 
   return (
     <div className={`relative rounded-[32px] p-6 shadow-sm border-2 transition-all duration-500 ${theme.card} ${isCompletedToday ? 'opacity-90 grayscale-[0.2] border-black/10' : 'border-transparent'} ${isReorderMode ? 'translate-x-2 border-dashed border-black/20' : ''}`}>
-      <div className="flex items-center gap-5">
+      <div className="flex items-start gap-5">
         {isReorderMode ? (
           <div className="flex flex-col gap-1 shrink-0 animate-in fade-in zoom-in duration-300">
              <button onClick={onMoveUp} className="w-10 h-10 rounded-xl bg-white/60 text-black/60 flex items-center justify-center active:bg-white/80">
@@ -126,7 +126,7 @@ const HabitCard: React.FC<HabitCardProps> = ({
         ) : (
           <button 
             onClick={() => onToggle(habit.id)} 
-            className={`w-14 h-14 rounded-3xl flex items-center justify-center transition-all duration-500 shrink-0 border-2 ${
+            className={`w-14 h-14 rounded-3xl flex items-center justify-center transition-all duration-500 shrink-0 border-2 mt-1 ${
               isCompletedToday ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200' : 'bg-white/80 text-orange-200 border-white shadow-sm'
             }`}
           >
@@ -151,14 +151,14 @@ const HabitCard: React.FC<HabitCardProps> = ({
           </div>
           
           <h3 
-            className={`font-bold text-orange-950 text-lg leading-tight transition-all truncate ${isCompletedToday && !isReorderMode ? 'opacity-40 line-through' : ''}`}
+            className={`font-bold text-orange-950 text-lg leading-tight transition-all break-words ${isCompletedToday && !isReorderMode ? 'opacity-40 line-through' : ''}`}
           >
             {habit.name}
           </h3>
         </div>
 
         {!isReorderMode && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 mt-1">
             <button onClick={(e) => { e.stopPropagation(); onEdit(habit); }} className="text-black/20 hover:text-black/60 p-2 transition-colors shrink-0">
               <Icons.Edit />
             </button>
