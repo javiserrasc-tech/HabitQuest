@@ -39,6 +39,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('habits');
   const [analysisPeriod, setAnalysisPeriod] = useState<Period>('weekly');
   const [expandedHabitId, setExpandedHabitId] = useState<number | null>(null);
+  const [isReorderMode, setIsReorderMode] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -86,6 +87,42 @@ const App: React.FC = () => {
 
   const isIdTaken = (id: number) => habits.some(h => h.id === id);
   const idInUse = newId !== '' && isIdTaken(parseInt(newId));
+
+  const getFirstAvailableId = () => {
+    const ids = new Set(habits.map(h => h.id));
+    let id = 1;
+    while (ids.has(id)) { id++; }
+    return id;
+  };
+
+  const calculateRate = (habit: Habit, daysBack: number | 'year') => {
+    const now = new Date();
+    let cutoffDate: Date;
+    
+    if (daysBack === 'year') {
+      cutoffDate = new Date(now.getFullYear(), 0, 1);
+    } else {
+      cutoffDate = new Date();
+      cutoffDate.setDate(now.getDate() - daysBack);
+    }
+    
+    const cutoffStr = getLocalDateString(cutoffDate);
+    const completions = habit.completedDates.filter(d => d >= cutoffStr).length;
+    
+    const diffTime = Math.abs(now.getTime() - cutoffDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+
+    let expected = 1;
+    if (habit.frequency === 'daily') {
+      expected = diffDays;
+    } else if (habit.frequency === 'weekly') {
+      expected = Math.ceil(diffDays / 7);
+    } else {
+      expected = Math.ceil(diffDays / 30);
+    }
+
+    return Math.min(100, Math.round((completions / expected) * 100));
+  };
 
   const syncToGoogleSheets = async (habit: Habit, valor: number, customDate?: string) => {
     if (!syncUrl) return;
@@ -173,28 +210,31 @@ const App: React.FC = () => {
   };
 
   const stats = useMemo(() => {
-    const daysToLookBack = analysisPeriod === 'weekly' ? 7 : 30;
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysToLookBack);
-    const cutoffStr = getLocalDateString(cutoffDate);
-    
     const totalHabitsCount = habits.length;
     const completedThisPeriodCount = habits.filter(isHabitCompletedCurrentPeriod).length;
     const globalCompletionRate = totalHabitsCount > 0 ? (completedThisPeriodCount / totalHabitsCount) * 100 : 0;
 
     const habitDetails = habits.map(h => {
-      const completionsInPeriod = h.completedDates.filter(d => d >= cutoffStr).length;
-      let expectedCompletions = daysToLookBack;
-      if (h.frequency === 'weekly') expectedCompletions = Math.ceil(daysToLookBack / 7);
-      if (h.frequency === 'monthly') expectedCompletions = Math.ceil(daysToLookBack / 30);
-      const rate = Math.min(100, Math.round((completionsInPeriod / expectedCompletions) * 100));
-      return { ...h, periodRate: rate, periodChecks: completionsInPeriod };
+      return { 
+        ...h, 
+        weekRate: calculateRate(h, 7),
+        threeMonthsRate: calculateRate(h, 90),
+        yearRate: calculateRate(h, 'year')
+      };
     });
 
     return { completedThisPeriodCount, totalHabitsCount, globalCompletionRate, habitDetails };
-  }, [habits, today, analysisPeriod]);
+  }, [habits, today]);
 
-  // Historiales específicos para Feedback del usuario
+  const moveHabit = (index: number, direction: 'up' | 'down') => {
+    const newHabits = [...habits];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex >= 0 && targetIndex < newHabits.length) {
+      [newHabits[index], newHabits[targetIndex]] = [newHabits[targetIndex], newHabits[index]];
+      setHabits(newHabits);
+    }
+  };
+
   const getHistoryDaily = (habit: Habit) => {
     const dates = [];
     for (let i = 29; i >= 0; i--) {
@@ -263,17 +303,17 @@ const App: React.FC = () => {
     }
 
     return (
-      <div className="mt-4 pt-4 border-t border-orange-50 animate-in fade-in slide-in-from-top-2">
-        <div className="flex justify-between items-end mb-3">
+      <div className="mt-6 pt-6 border-t border-orange-100 animate-in fade-in slide-in-from-top-2">
+        <div className="flex justify-between items-end mb-4">
           <div>
             <p className="text-[10px] font-black uppercase text-orange-400 tracking-wider mb-0.5">{label}</p>
             <p className="text-xs font-bold text-orange-700">{sublabel}</p>
           </div>
           <p className="text-[9px] font-bold text-orange-300">Total histórico: {totalCompletions}</p>
         </div>
-        <div className="grid grid-cols-6 gap-2">
+        <div className="grid grid-cols-6 gap-2.5">
            {history.map((item, idx) => (
-              <div key={idx} className={`aspect-square rounded-lg border-2 flex items-center justify-center transition-all ${item.completed ? 'bg-orange-600 border-orange-600 text-white' : 'bg-orange-50 border-orange-100 text-orange-200'}`}>
+              <div key={idx} className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all ${item.completed ? 'bg-orange-600 border-orange-600 text-white' : 'bg-orange-50 border-orange-100 text-orange-200'}`}>
                 {item.completed && <Icons.Check />}
               </div>
             ))}
@@ -298,6 +338,13 @@ const App: React.FC = () => {
             <Icons.Settings />
             <span className="text-[10px] font-black uppercase tracking-wider">Etiquetas</span>
           </button>
+          <button 
+            onClick={() => setIsReorderMode(!isReorderMode)} 
+            className={`p-3 rounded-2xl border shadow-sm flex items-center gap-2 active:scale-95 transition-all ${isReorderMode ? 'bg-orange-600 text-white border-orange-600' : 'bg-orange-100/50 border-orange-200 text-orange-600'}`}
+          >
+            <Icons.Move />
+            <span className="text-[10px] font-black uppercase tracking-wider">{isReorderMode ? 'Hecho' : 'Mover'}</span>
+          </button>
         </div>
         <button onClick={() => setIsSyncModalOpen(true)} className={`p-3 rounded-2xl transition-all shadow-sm border ${syncUrl ? 'text-orange-700 bg-orange-100 border-orange-200' : 'opacity-30'}`}>
           <Icons.Cloud />
@@ -312,24 +359,26 @@ const App: React.FC = () => {
               <p className="font-medium opacity-60 uppercase text-[10px] tracking-widest">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
             </header>
 
-            <div className="mb-8 rounded-[32px] p-7 shadow-xl relative overflow-hidden bg-orange-700 text-orange-50">
-               <div className="relative z-10">
-                 <p className="text-[10px] font-bold mb-1 uppercase tracking-widest opacity-60">Progreso del día</p>
-                 <div className="flex items-baseline gap-2">
-                   <h2 className="text-5xl font-black">{Math.round(stats.globalCompletionRate)}%</h2>
-                   <p className="opacity-70 font-bold">{stats.completedThisPeriodCount} / {stats.totalHabitsCount}</p>
-                 </div>
-                 <div className="mt-6 w-full rounded-full h-3 bg-white/10">
-                    <div className="h-full rounded-full transition-all duration-1000 ease-out bg-orange-300" style={{ width: `${stats.globalCompletionRate}%` }} />
-                 </div>
-               </div>
-            </div>
+            {!isReorderMode && (
+              <div className="mb-8 rounded-[32px] p-7 shadow-xl relative overflow-hidden bg-orange-700 text-orange-50 animate-in zoom-in duration-300">
+                <div className="relative z-10">
+                  <p className="text-[10px] font-bold mb-1 uppercase tracking-widest opacity-60">Progreso del día</p>
+                  <div className="flex items-baseline gap-2">
+                    <h2 className="text-5xl font-black">{Math.round(stats.globalCompletionRate)}%</h2>
+                    <p className="opacity-70 font-bold">{stats.completedThisPeriodCount} / {stats.totalHabitsCount}</p>
+                  </div>
+                  <div className="mt-6 w-full rounded-full h-3 bg-white/10">
+                      <div className="h-full rounded-full transition-all duration-1000 ease-out bg-orange-300" style={{ width: `${stats.globalCompletionRate}%` }} />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <section className="space-y-4">
               {habits.length === 0 ? (
                 <div className="text-center py-20 opacity-40 italic">Nada por aquí aún... pulsa +</div>
               ) : (
-                habits.map(h => (
+                habits.map((h, idx) => (
                   <HabitCard 
                     key={h.id} 
                     habit={h}
@@ -340,6 +389,9 @@ const App: React.FC = () => {
                     onUpdate={handleUpdateHabit}
                     onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))}
                     onLogPast={(habit) => { setSelectedHabitForPastDate(habit); setIsPastDateModalOpen(true); }}
+                    isReorderMode={isReorderMode}
+                    onMoveUp={() => moveHabit(idx, 'up')}
+                    onMoveDown={() => moveHabit(idx, 'down')}
                   />
                 ))
               )}
@@ -347,18 +399,40 @@ const App: React.FC = () => {
           </div>
         ) : (
           <div className="px-6 animate-in slide-in-from-right duration-500">
-             <header className="flex flex-col mb-8 gap-4">
+             <header className="mb-8">
                 <h1 className="text-3xl font-black tracking-tight text-orange-950">Análisis</h1>
+                <p className="text-[10px] font-black uppercase text-orange-400 tracking-widest mt-1">Rendimiento Histórico</p>
              </header>
              <div className="space-y-4 pb-12">
               {stats.habitDetails.map(habit => (
-                <div key={habit.id} onClick={() => setExpandedHabitId(expandedHabitId === habit.id ? null : habit.id)} className={`bg-[#fffdf5] border-2 rounded-[32px] p-6 shadow-sm cursor-pointer transition-all duration-300 ${expandedHabitId === habit.id ? 'border-orange-500 bg-orange-50/20' : 'border-orange-100/50'}`}>
-                  <div className="flex justify-between items-start">
+                <div key={habit.id} onClick={() => setExpandedHabitId(expandedHabitId === habit.id ? null : habit.id)} className={`bg-[#fffdf5] border-2 rounded-[32px] p-6 shadow-sm cursor-pointer transition-all duration-300 ${expandedHabitId === habit.id ? 'border-orange-500 bg-orange-50/20 shadow-lg' : 'border-orange-100/50'}`}>
+                  <div className="flex flex-col gap-5">
                     <div className="flex-1 min-w-0">
-                      <h4 className={`font-black text-orange-900 truncate text-lg ${expandedHabitId === habit.id ? 'mb-1' : ''}`}>{habit.name}</h4>
-                      <p className="text-[10px] opacity-40 uppercase font-black tracking-widest">{habit.category} • {habit.frequency === 'daily' ? 'Diario' : habit.frequency === 'weekly' ? 'Semanal' : 'Mensual'}</p>
+                      <h4 className="font-black text-orange-900 truncate text-lg mb-1">{habit.name}</h4>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[8px] font-black uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-md border shrink-0 ${getTagStyles(habit.category)}`}>
+                          {habit.category}
+                        </span>
+                        <span className="text-[8px] opacity-40 uppercase font-black tracking-widest">
+                          {habit.frequency === 'daily' ? 'Diario' : habit.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-2xl font-black text-orange-700">{habit.periodRate}%</div>
+                    
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-white/50 border border-orange-100 rounded-2xl p-3 flex flex-col items-center">
+                        <span className="text-[8px] font-black uppercase text-orange-300 mb-1">Semana</span>
+                        <span className="text-lg font-black text-orange-700">{habit.weekRate}%</span>
+                      </div>
+                      <div className="bg-white/50 border border-orange-100 rounded-2xl p-3 flex flex-col items-center">
+                        <span className="text-[8px] font-black uppercase text-orange-300 mb-1">3 Meses</span>
+                        <span className="text-lg font-black text-orange-700">{habit.threeMonthsRate}%</span>
+                      </div>
+                      <div className="bg-white/50 border border-orange-100 rounded-2xl p-3 flex flex-col items-center">
+                        <span className="text-[8px] font-black uppercase text-orange-300 mb-1">Año</span>
+                        <span className="text-lg font-black text-orange-700">{habit.yearRate}%</span>
+                      </div>
+                    </div>
                   </div>
                   {expandedHabitId === habit.id && renderHabitAnalysis(habit)}
                 </div>
@@ -377,7 +451,7 @@ const App: React.FC = () => {
           <span className="text-[9px] font-black uppercase">Hábitos</span>
         </button>
         <button onClick={() => { 
-          setNewId(String(habits.length > 0 ? Math.max(...habits.map(h => h.id)) + 1 : 101));
+          setNewId(String(getFirstAvailableId()));
           setIsModalOpen(true); 
         }} className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl bg-orange-700 text-white -mt-10 border-4 border-orange-50">
           <Icons.Plus />

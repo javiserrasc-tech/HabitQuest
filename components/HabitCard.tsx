@@ -11,9 +11,23 @@ interface HabitCardProps {
   onLogPast: (habit: Habit) => void;
   onEdit: (habit: Habit) => void;
   isCompletedToday: boolean;
+  isReorderMode?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
-const HabitCard: React.FC<HabitCardProps> = ({ habit, userTags, onToggle, onDelete, onLogPast, onEdit, isCompletedToday }) => {
+const HabitCard: React.FC<HabitCardProps> = ({ 
+  habit, 
+  userTags, 
+  onToggle, 
+  onDelete, 
+  onLogPast, 
+  onEdit, 
+  isCompletedToday,
+  isReorderMode,
+  onMoveUp,
+  onMoveDown
+}) => {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
   
@@ -99,16 +113,27 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, userTags, onToggle, onDele
   }
 
   return (
-    <div className={`relative bg-[#fffdf5] rounded-[32px] p-6 shadow-md border-2 transition-all ${isCompletedToday ? 'border-orange-500/20 bg-orange-50/30' : 'border-orange-100/50'}`}>
+    <div className={`relative bg-[#fffdf5] rounded-[32px] p-6 shadow-md border-2 transition-all duration-500 ${isCompletedToday ? 'border-orange-500/20 bg-orange-50/30' : 'border-orange-100/50'} ${isReorderMode ? 'translate-x-2 border-orange-400' : ''}`}>
       <div className="flex items-center gap-5">
-        <button 
-          onClick={() => onToggle(habit.id)} 
-          className={`w-14 h-14 rounded-3xl flex items-center justify-center transition-all duration-500 shrink-0 border-2 ${
-            isCompletedToday ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200' : 'bg-orange-50/50 text-orange-200 border-orange-100'
-          }`}
-        >
-          {isCompletedToday ? <Icons.Check /> : <div className="w-2 h-2 rounded-full bg-orange-200" />}
-        </button>
+        {isReorderMode ? (
+          <div className="flex flex-col gap-1 shrink-0 animate-in fade-in zoom-in duration-300">
+             <button onClick={onMoveUp} className="w-10 h-10 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center active:bg-orange-200">
+               <Icons.Up />
+             </button>
+             <button onClick={onMoveDown} className="w-10 h-10 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center active:bg-orange-200">
+               <Icons.Down />
+             </button>
+          </div>
+        ) : (
+          <button 
+            onClick={() => onToggle(habit.id)} 
+            className={`w-14 h-14 rounded-3xl flex items-center justify-center transition-all duration-500 shrink-0 border-2 ${
+              isCompletedToday ? 'bg-orange-600 border-orange-600 text-white shadow-lg shadow-orange-200' : 'bg-orange-50/50 text-orange-200 border-orange-100'
+            }`}
+          >
+            {isCompletedToday ? <Icons.Check /> : <div className="w-2 h-2 rounded-full bg-orange-200" />}
+          </button>
+        )}
         
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 overflow-x-auto no-scrollbar">
@@ -119,9 +144,6 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, userTags, onToggle, onDele
             <span className={`text-[8px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-md border shrink-0 ${getFrequencyStyle()}`}>
               {getFrequencyLabel()}
             </span>
-            <span className="text-[9px] font-black px-1.5 rounded-md border border-orange-100/50 bg-orange-50 text-orange-300 whitespace-nowrap">
-              ID: {habit.id}
-            </span>
             {habit.streak > 0 && (
               <span className="text-[10px] font-bold text-orange-500 whitespace-nowrap">
                 🔥 {habit.streak}
@@ -130,23 +152,25 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, userTags, onToggle, onDele
           </div>
           
           <h3 
-            className={`font-bold text-orange-900 text-lg leading-tight transition-all truncate ${isCompletedToday ? 'opacity-30 line-through' : ''}`}
+            className={`font-bold text-orange-900 text-lg leading-tight transition-all truncate ${isCompletedToday && !isReorderMode ? 'opacity-30 line-through' : ''}`}
           >
             {habit.name}
           </h3>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button onClick={(e) => { e.stopPropagation(); onEdit(habit); }} className="text-orange-200 hover:text-orange-500 p-2 transition-colors shrink-0">
-            <Icons.Edit />
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); onLogPast(habit); }} className="text-orange-200 hover:text-orange-500 p-2 transition-colors shrink-0">
-            <Icons.Calendar />
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); setIsConfirmingDelete(true); }} className="text-orange-200 hover:text-red-500 p-2 transition-colors shrink-0">
-            <Icons.Trash />
-          </button>
-        </div>
+        {!isReorderMode && (
+          <div className="flex items-center gap-1">
+            <button onClick={(e) => { e.stopPropagation(); onEdit(habit); }} className="text-orange-200 hover:text-orange-500 p-2 transition-colors shrink-0">
+              <Icons.Edit />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onLogPast(habit); }} className="text-orange-200 hover:text-orange-500 p-2 transition-colors shrink-0">
+              <Icons.Calendar />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setIsConfirmingDelete(true); }} className="text-orange-200 hover:text-red-500 p-2 transition-colors shrink-0">
+              <Icons.Trash />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
