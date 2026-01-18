@@ -34,6 +34,8 @@ const getStartOfMonth = (date: Date) => {
 };
 
 const App: React.FC = () => {
+  const today = getLocalDateString();
+  const [selectedDate, setSelectedDate] = useState(today);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [userTags, setUserTags] = useState<UserTag[]>([DEFAULT_TAG]);
   const [currentView, setCurrentView] = useState<View>('habits');
@@ -71,7 +73,6 @@ const App: React.FC = () => {
     if (savedTags) {
       const parsedTags = JSON.parse(savedTags);
       if (parsedTags.length > 0) {
-        // Asegurar que los indices de color esten dentro del rango de 5 colores
         const formattedTags = parsedTags.map((t: any) => ({
           name: typeof t === 'string' ? t : t.name,
           colorIndex: (t.colorIndex !== undefined ? t.colorIndex : 0) % COLOR_PALETTE.length
@@ -90,10 +91,6 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(TAGS_KEY, JSON.stringify(userTags));
   }, [userTags]);
-
-  const today = getLocalDateString();
-  const startOfCurrentWeek = getStartOfWeek(new Date());
-  const startOfCurrentMonth = getStartOfMonth(new Date());
 
   const isIdTaken = (id: number) => habits.some(h => h.id === id);
   const idInUse = newId !== '' && isIdTaken(parseInt(newId));
@@ -129,7 +126,7 @@ const App: React.FC = () => {
     if (!syncUrl) return;
     setIsSyncing(true);
     try {
-      const dateOnly = customDate || today;
+      const dateOnly = customDate || selectedDate;
       const payload = {
         action: 'upsert', 
         id_habito: habit.id,
@@ -151,28 +148,51 @@ const App: React.FC = () => {
     }
   };
 
+  const isHabitCompletedForDate = (habit: Habit, dateStr: string) => {
+    if (habit.frequency === 'daily') return habit.completedDates.includes(dateStr);
+    const date = new Date(dateStr);
+    if (habit.frequency === 'weekly') {
+      const start = getStartOfWeek(date);
+      const end = getLocalDateString(new Date(new Date(start).getTime() + 6 * 24 * 60 * 60 * 1000));
+      return habit.completedDates.some(d => d >= start && d <= end);
+    }
+    const startM = getStartOfMonth(date);
+    const endM = getLocalDateString(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+    return habit.completedDates.some(d => d >= startM && d <= endM);
+  };
+
   const handleToggleHabit = (id: number) => {
     setHabits(prev => prev.map(h => {
       if (h.id === id) {
-        const isCompletedNow = isHabitCompletedCurrentPeriod(h);
+        const isCompletedNow = isHabitCompletedForDate(h, selectedDate);
         let newCompletedDates = [...h.completedDates];
         const newVal = isCompletedNow ? 0 : 1; 
+        
         if (isCompletedNow) {
-          if (h.frequency === 'daily') newCompletedDates = newCompletedDates.filter(d => d !== today);
-          else if (h.frequency === 'weekly') newCompletedDates = newCompletedDates.filter(d => d < startOfCurrentWeek);
-          else newCompletedDates = newCompletedDates.filter(d => d < startOfCurrentMonth);
+          if (h.frequency === 'daily') {
+            newCompletedDates = newCompletedDates.filter(d => d !== selectedDate);
+          } else {
+            // Para semanal/mensual, eliminamos cualquier registro en el periodo de la selectedDate
+            const date = new Date(selectedDate);
+            if (h.frequency === 'weekly') {
+              const start = getStartOfWeek(date);
+              const end = getLocalDateString(new Date(new Date(start).getTime() + 6 * 24 * 60 * 60 * 1000));
+              newCompletedDates = newCompletedDates.filter(d => !(d >= start && d <= end));
+            } else {
+              const startM = getStartOfMonth(date);
+              const endM = getLocalDateString(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+              newCompletedDates = newCompletedDates.filter(d => !(d >= startM && d <= endM));
+            }
+          }
         } else {
-          newCompletedDates.push(today);
+          newCompletedDates.push(selectedDate);
         }
-        syncToGoogleSheets(h, newVal);
+        
+        syncToGoogleSheets(h, newVal, selectedDate);
         return { ...h, completedDates: newCompletedDates, streak: !isCompletedNow ? h.streak + 1 : Math.max(0, h.streak - 1) };
       }
       return h;
     }));
-  };
-
-  const handleUpdateHabit = (id: number, updates: Partial<Habit>) => {
-    setHabits(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
   };
 
   const handleAddHabit = (e?: React.FormEvent) => {
@@ -194,21 +214,15 @@ const App: React.FC = () => {
     if (e) e.preventDefault();
     if (!editingHabit) return;
     setHabits(prev => prev.map(h => h.id === editingHabit.id ? editingHabit : h));
-    const isDone = editingHabit.completedDates.includes(today);
-    syncToGoogleSheets(editingHabit, isDone ? 1 : 0, today);
+    const isDone = editingHabit.completedDates.includes(selectedDate);
+    syncToGoogleSheets(editingHabit, isDone ? 1 : 0, selectedDate);
     setIsEditModalOpen(false);
     setEditingHabit(null);
   };
 
-  const isHabitCompletedCurrentPeriod = (habit: Habit) => {
-    if (habit.frequency === 'daily') return habit.completedDates.includes(today);
-    if (habit.frequency === 'weekly') return habit.completedDates.some(d => d >= startOfCurrentWeek);
-    return habit.completedDates.some(d => d >= startOfCurrentMonth);
-  };
-
   const stats = useMemo(() => {
     const totalHabitsCount = habits.length;
-    const completedThisPeriodCount = habits.filter(isHabitCompletedCurrentPeriod).length;
+    const completedThisPeriodCount = habits.filter(h => isHabitCompletedForDate(h, selectedDate)).length;
     const globalCompletionRate = totalHabitsCount > 0 ? (completedThisPeriodCount / totalHabitsCount) * 100 : 0;
     const habitDetails = habits.map(h => ({ 
         ...h, 
@@ -217,7 +231,7 @@ const App: React.FC = () => {
         yearRate: calculateRate(h, 'year')
       }));
     return { completedThisPeriodCount, totalHabitsCount, globalCompletionRate, habitDetails };
-  }, [habits, today]);
+  }, [habits, selectedDate]);
 
   const moveHabit = (index: number, direction: 'up' | 'down') => {
     const newHabits = [...habits];
@@ -228,57 +242,35 @@ const App: React.FC = () => {
     }
   };
 
-  const getHistoryDaily = (habit: Habit) => {
-    const dates = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i);
-      const iso = getLocalDateString(d);
-      dates.push({ date: iso, completed: habit.completedDates.includes(iso) });
-    }
-    return dates;
-  };
-
-  const getHistoryWeekly = (habit: Habit) => {
-    const weeks = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - (i * 7));
-      const start = getStartOfWeek(d);
-      const end = getLocalDateString(new Date(new Date(start).getTime() + 6 * 24 * 60 * 60 * 1000));
-      const isCompleted = habit.completedDates.some(cd => cd >= start && cd <= end);
-      weeks.push({ start, end, completed: isCompleted });
-    }
-    return weeks;
-  };
-
-  const getHistoryMonthly = (habit: Habit) => {
-    const months = [];
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(); d.setMonth(d.getMonth() - i);
-      const m = d.getMonth(); const y = d.getFullYear();
-      const start = getLocalDateString(new Date(y, m, 1));
-      const end = getLocalDateString(new Date(y, m + 1, 0));
-      const isCompleted = habit.completedDates.some(cd => cd >= start && cd <= end);
-      months.push({ start, end, completed: isCompleted });
-    }
-    return months;
-  };
-
-  const handleSaveSyncUrl = () => {
-    localStorage.setItem(SYNC_URL_KEY, syncUrl);
-    setIsSyncModalOpen(false);
-  };
-
   const renderHabitAnalysis = (habit: Habit) => {
     let history: { completed: boolean }[] = [];
     let label = ""; let sublabel = "";
     if (habit.frequency === 'daily') {
-      history = getHistoryDaily(habit); label = "Últimos 30 días";
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const iso = getLocalDateString(d);
+        history.push({ completed: habit.completedDates.includes(iso) });
+      }
+      label = "Últimos 30 días";
       sublabel = `${history.filter(h => h.completed).length} de 30 completados`;
     } else if (habit.frequency === 'weekly') {
-      history = getHistoryWeekly(habit); label = "Últimas 12 semanas";
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - (i * 7));
+        const start = getStartOfWeek(d);
+        const end = getLocalDateString(new Date(new Date(start).getTime() + 6 * 24 * 60 * 60 * 1000));
+        history.push({ completed: habit.completedDates.some(cd => cd >= start && cd <= end) });
+      }
+      label = "Últimas 12 semanas";
       sublabel = `${history.filter(h => h.completed).length} de 12 completadas`;
     } else {
-      history = getHistoryMonthly(habit); label = "Últimos 12 meses";
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(); d.setMonth(d.getMonth() - i);
+        const m = d.getMonth(); const y = d.getFullYear();
+        const start = getLocalDateString(new Date(y, m, 1));
+        const end = getLocalDateString(new Date(y, m + 1, 0));
+        history.push({ completed: habit.completedDates.some(cd => cd >= start && cd <= end) });
+      }
+      label = "Últimos 12 meses";
       sublabel = `${history.filter(h => h.completed).length} de 12 completados`;
     }
     return (
@@ -301,8 +293,15 @@ const App: React.FC = () => {
     );
   };
 
+  const handleSaveSyncUrl = () => {
+    localStorage.setItem(SYNC_URL_KEY, syncUrl);
+    setIsSyncModalOpen(false);
+  };
+
+  const isPast = selectedDate !== today;
+
   return (
-    <div className="max-w-md mx-auto min-h-screen flex flex-col relative safe-area-inset-top text-orange-950">
+    <div className={`max-w-md mx-auto min-h-screen flex flex-col relative safe-area-inset-top text-orange-950 transition-colors duration-500 ${isPast ? 'bg-amber-50/30' : ''}`}>
       {isSyncing && (
         <div className="fixed top-12 left-1/2 -translate-x-1/2 z-[100] bg-orange-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 animate-in fade-in zoom-in duration-300">
           <div className="w-2 h-2 bg-orange-300 rounded-full animate-pulse"></div>
@@ -310,7 +309,13 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <div className="px-6 pt-8 flex justify-between items-start mb-2">
+      {isPast && (
+        <div className="bg-orange-600 text-white text-[9px] font-black uppercase tracking-[0.2em] py-1.5 text-center shadow-sm animate-in slide-in-from-top duration-300">
+          Modo Historial Activo
+        </div>
+      )}
+
+      <div className={`px-6 pt-8 flex justify-between items-start mb-2 transition-all ${isPast ? 'bg-orange-50/80 backdrop-blur-md pb-4' : ''}`}>
         <div className="flex gap-2">
           <button onClick={() => setIsTagManagerOpen(true)} className="p-3 rounded-2xl border bg-white/60 border-black/5 text-black/60 shadow-sm flex items-center gap-2 active:scale-95 transition-all">
             <Icons.Settings />
@@ -329,14 +334,29 @@ const App: React.FC = () => {
       <div className="flex-1 overflow-y-auto pb-32">
         {currentView === 'habits' ? (
           <div className="px-6 animate-in fade-in duration-500">
-            <header className="mb-8">
-              <h1 className="text-3xl font-black tracking-tight">HabitQuest</h1>
-              <p className="font-medium opacity-60 uppercase text-[10px] tracking-widest">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+            <header className="mb-8 flex flex-col gap-1">
+              <div className="flex items-center justify-between gap-4">
+                <h1 className="text-3xl font-black tracking-tight">HabitQuest</h1>
+                <div className="relative group">
+                  <input 
+                    type="date" 
+                    value={selectedDate} 
+                    max={today}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-white/40 border border-black/5 px-3 py-2 rounded-xl font-bold text-[10px] uppercase tracking-wider outline-none focus:ring-2 ring-orange-200 transition-all cursor-pointer"
+                  />
+                </div>
+              </div>
+              <p className="font-medium opacity-60 uppercase text-[10px] tracking-widest">
+                {new Date(selectedDate + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </p>
             </header>
             {!isReorderMode && (
-              <div className="mb-8 rounded-[32px] p-7 shadow-xl relative overflow-hidden bg-orange-700 text-orange-50 animate-in zoom-in duration-300">
+              <div className={`mb-8 rounded-[32px] p-7 shadow-xl relative overflow-hidden text-orange-50 animate-in zoom-in duration-300 transition-all ${isPast ? 'bg-orange-800' : 'bg-orange-700'}`}>
                 <div className="relative z-10">
-                  <p className="text-[10px] font-bold mb-1 uppercase tracking-widest opacity-60">Progreso del día</p>
+                  <p className="text-[10px] font-bold mb-1 uppercase tracking-widest opacity-60">
+                    {isPast ? `Progreso el ${selectedDate}` : 'Progreso del día'}
+                  </p>
                   <div className="flex items-baseline gap-2">
                     <h2 className="text-5xl font-black">{Math.round(stats.globalCompletionRate)}%</h2>
                     <p className="opacity-70 font-bold">{stats.completedThisPeriodCount} / {stats.totalHabitsCount}</p>
@@ -352,8 +372,19 @@ const App: React.FC = () => {
                 <div className="text-center py-20 opacity-40 italic">Nada por aquí aún... pulsa +</div>
               ) : (
                 habits.map((h, idx) => (
-                  /* Fixed: removed onUpdate prop which was causing a type error as it's not defined in HabitCardProps */
-                  <HabitCard key={h.id} habit={h} userTags={userTags} isCompletedToday={isHabitCompletedCurrentPeriod(h)} onToggle={handleToggleHabit} onEdit={(habit) => { setEditingHabit({...habit}); setIsEditModalOpen(true); }} onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} onLogPast={(habit) => { setSelectedHabitForPastDate(habit); setIsPastDateModalOpen(true); }} isReorderMode={isReorderMode} onMoveUp={() => moveHabit(idx, 'up')} onMoveDown={() => moveHabit(idx, 'down')} />
+                  <HabitCard 
+                    key={h.id} 
+                    habit={h} 
+                    userTags={userTags} 
+                    isCompletedToday={isHabitCompletedForDate(h, selectedDate)} 
+                    onToggle={handleToggleHabit} 
+                    onEdit={(habit) => { setEditingHabit({...habit}); setIsEditModalOpen(true); }} 
+                    onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} 
+                    onLogPast={(habit) => { setSelectedHabitForPastDate(habit); setIsPastDateModalOpen(true); }} 
+                    isReorderMode={isReorderMode} 
+                    onMoveUp={() => moveHabit(idx, 'up')} 
+                    onMoveDown={() => moveHabit(idx, 'down')} 
+                  />
                 ))
               )}
             </section>
