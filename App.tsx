@@ -21,9 +21,10 @@ const getLocalDateString = (date: Date = new Date()) => {
 
 const getStartOfWeek = (date: Date) => {
   const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const start = new Date(d.setDate(diff));
+  const day = d.getDay(); // El domingo es 0 en JavaScript
+  // Restamos el número de día actual para retroceder hasta el domingo
+  const diff = d.getDate() - day;
+  const start = new Date(d.getFullYear(), d.getMonth(), diff);
   return getLocalDateString(start);
 };
 
@@ -162,6 +163,7 @@ const App: React.FC = () => {
     const date = new Date(dateStr);
     if (habit.frequency === 'weekly') {
       const start = getStartOfWeek(date);
+      // La semana termina el sábado (6 días después del domingo)
       const end = getLocalDateString(new Date(new Date(start).getTime() + 6 * 24 * 60 * 60 * 1000));
       return habit.completedDates.some(d => d >= start && d <= end);
     }
