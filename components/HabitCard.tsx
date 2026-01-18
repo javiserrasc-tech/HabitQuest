@@ -92,13 +92,24 @@ const HabitCard: React.FC<HabitCardProps> = ({
     );
   }
 
+  const isNegative = habit.type === 'negative';
+
   return (
-    <div className={`relative rounded-[32px] p-5 shadow-sm border-2 transition-all duration-300 ${theme.card} ${isCompletedToday ? 'opacity-70 grayscale-[0.3] border-black/5' : 'border-transparent'}`}>
+    <div className={`relative rounded-[32px] p-5 shadow-sm border-2 transition-all duration-300 ${theme.card} ${
+      isCompletedToday 
+      ? 'opacity-70 grayscale-[0.3] border-black/5' 
+      : isNegative ? 'border-rose-200' : 'border-transparent'
+    }`}>
       <div className="flex flex-col gap-4">
         
         {/* Fila Superior: Etiquetas y Acciones de Gestión */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {isNegative && (
+              <span className="text-rose-500 animate-pulse">
+                <Icons.Alert />
+              </span>
+            )}
             <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border shrink-0 ${theme.tag}`}>
               {habit.category}
             </span>
@@ -132,17 +143,23 @@ const HabitCard: React.FC<HabitCardProps> = ({
             onClick={() => onToggle(habit.id)} 
             className={`w-11 h-11 shrink-0 rounded-2xl flex items-center justify-center transition-all duration-300 border-2 ${
               isCompletedToday 
-              ? 'bg-orange-600 border-orange-600 text-white shadow-md' 
+              ? (isNegative ? 'bg-rose-600 border-rose-600' : 'bg-orange-600 border-orange-600') + ' text-white shadow-md' 
               : 'bg-white text-orange-200 border-orange-100 hover:border-orange-200 active:scale-90'
             }`}
           >
-            {isCompletedToday ? <Icons.Check /> : <div className="w-4 h-4 rounded-full border-2 border-current opacity-20" />}
+            {isCompletedToday ? <Icons.Check /> : <div className={`w-4 h-4 rounded-full border-2 border-current opacity-20`} />}
           </button>
           
           <div className="flex-1 min-w-0">
             <h3 className={`font-bold text-orange-950 text-lg leading-tight transition-all break-words ${isCompletedToday ? 'line-through opacity-40' : ''}`}>
               {habit.name}
             </h3>
+            {isNegative && !isCompletedToday && (
+              <p className="text-[8px] font-black uppercase text-rose-400 mt-1 tracking-wider">¡No caigas!</p>
+            )}
+            {isNegative && isCompletedToday && (
+              <p className="text-[8px] font-black uppercase text-rose-600 mt-1 tracking-wider">Caído hoy</p>
+            )}
           </div>
         </div>
       </div>

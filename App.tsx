@@ -58,6 +58,7 @@ const App: React.FC = () => {
   
   const [newId, setNewId] = useState<string>('');
   const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState<'positive' | 'negative'>('positive');
   const [selectedTagName, setSelectedTagName] = useState(DEFAULT_TAG.name);
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
@@ -67,7 +68,11 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const savedHabits = localStorage.getItem(STORAGE_KEY);
-    if (savedHabits) setHabits(JSON.parse(savedHabits));
+    if (savedHabits) {
+      const parsed = JSON.parse(savedHabits);
+      // Asegurar que los hábitos antiguos tengan un type
+      setHabits(parsed.map((h: any) => ({ ...h, type: h.type || 'positive' })));
+    }
     
     const savedTags = localStorage.getItem(TAGS_KEY);
     if (savedTags) {
@@ -119,7 +124,11 @@ const App: React.FC = () => {
     if (habit.frequency === 'daily') expected = diffDays;
     else if (habit.frequency === 'weekly') expected = Math.ceil(diffDays / 7);
     else expected = Math.ceil(diffDays / 30);
-    return Math.min(100, Math.round((completions / expected) * 100));
+    
+    const rawRate = (completions / expected);
+    // Para hábitos negativos, la tasa es el % de días en los que NO se ha marcado (completados = caídas)
+    const finalRate = habit.type === 'negative' ? (1 - rawRate) : rawRate;
+    return Math.min(100, Math.max(0, Math.round(finalRate * 100)));
   };
 
   const syncToGoogleSheets = async (habit: Habit, valor: number, customDate?: string) => {
@@ -164,15 +173,26 @@ const App: React.FC = () => {
   const handleToggleHabit = (id: number) => {
     setHabits(prev => prev.map(h => {
       if (h.id === id) {
-        const isCompletedNow = isHabitCompletedForDate(h, selectedDate);
-        let newCompletedDates = [...h.completedDates];
-        const newVal = isCompletedNow ? 0 : 1; 
+        const isCurrentlyMarked = isHabitCompletedForDate(h, selectedDate);
+        const willBeMarked = !isCurrentlyMarked;
         
-        if (isCompletedNow) {
+        // LOGICA CRÍTICA: Hábitos Negativos
+        let sheetValue: number;
+        if (h.type === 'negative') {
+          // Si lo marco (willBeMarked = true), es que caí => enviar 0
+          // Si lo desmarco (willBeMarked = false), es que me resistí => enviar 1
+          sheetValue = willBeMarked ? 0 : 1;
+        } else {
+          // Si lo marco, completado => enviar 1
+          // Si lo desmarco, no completado => enviar 0
+          sheetValue = willBeMarked ? 1 : 0;
+        }
+
+        let newCompletedDates = [...h.completedDates];
+        if (isCurrentlyMarked) {
           if (h.frequency === 'daily') {
             newCompletedDates = newCompletedDates.filter(d => d !== selectedDate);
           } else {
-            // Para semanal/mensual, eliminamos cualquier registro en el periodo de la selectedDate
             const date = new Date(selectedDate);
             if (h.frequency === 'weekly') {
               const start = getStartOfWeek(date);
@@ -188,8 +208,17 @@ const App: React.FC = () => {
           newCompletedDates.push(selectedDate);
         }
         
-        syncToGoogleSheets(h, newVal, selectedDate);
-        return { ...h, completedDates: newCompletedDates, streak: !isCompletedNow ? h.streak + 1 : Math.max(0, h.streak - 1) };
+        syncToGoogleSheets(h, sheetValue, selectedDate);
+        
+        // Streak logic simplificada: para positivos incrementa al marcar, para negativos al resistir (desmarcar)
+        let newStreak = h.streak;
+        if (h.type === 'negative') {
+          newStreak = willBeMarked ? 0 : h.streak + 1; // Si marco (caigo), reseteo. Si desmarco (resisto), sumo? Un poco raro para desmarcar.
+        } else {
+          newStreak = willBeMarked ? h.streak + 1 : Math.max(0, h.streak - 1);
+        }
+
+        return { ...h, completedDates: newCompletedDates, streak: newStreak };
       }
       return h;
     }));
@@ -201,36 +230,60 @@ const App: React.FC = () => {
     if (isNaN(idNum) || !newName.trim() || isIdTaken(idNum)) return;
     const newHabit: Habit = {
       id: idNum, name: newName, description: '', category: selectedTagName,
+      type: newType,
       frequency: newFreq, color: '#10b981', completedDates: [],
       createdAt: new Date().toISOString(), streak: 0
     };
     setHabits(prev => [...prev, newHabit]);
     setIsModalOpen(false);
-    setNewId(''); setNewName(''); setSelectedTagName(userTags[0]?.name || DEFAULT_TAG.name);
-    syncToGoogleSheets(newHabit, 0, today);
+    setNewId(''); setNewName(''); setSelectedTagName(userTags[0]?.name || DEFAULT_TAG.name); setNewType('positive');
+    // Para hábitos negativos, al crear se asume que se resistió hoy (valor 1)? 
+    // Por simplicidad enviamos 0 de valor neutral en la creación para positivos, 1 para negativos (resistencia por defecto si no hay marca)
+    syncToGoogleSheets(newHabit, newHabit.type === 'negative' ? 1 : 0, today);
   };
 
   const handleSaveEdit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!editingHabit) return;
     setHabits(prev => prev.map(h => h.id === editingHabit.id ? editingHabit : h));
-    const isDone = editingHabit.completedDates.includes(selectedDate);
-    syncToGoogleSheets(editingHabit, isDone ? 1 : 0, selectedDate);
+    
+    const isMarked = editingHabit.completedDates.includes(selectedDate);
+    let sheetValue: number;
+    if (editingHabit.type === 'negative') {
+        sheetValue = isMarked ? 0 : 1;
+    } else {
+        sheetValue = isMarked ? 1 : 0;
+    }
+    
+    syncToGoogleSheets(editingHabit, sheetValue, selectedDate);
     setIsEditModalOpen(false);
     setEditingHabit(null);
   };
 
   const stats = useMemo(() => {
     const totalHabitsCount = habits.length;
-    const completedThisPeriodCount = habits.filter(h => isHabitCompletedForDate(h, selectedDate)).length;
-    const globalCompletionRate = totalHabitsCount > 0 ? (completedThisPeriodCount / totalHabitsCount) * 100 : 0;
+    // La tasa de hoy es complicada si mezclamos tipos.
+    // Usaremos un promedio de las tasas individuales
     const habitDetails = habits.map(h => ({ 
         ...h, 
         weekRate: calculateRate(h, 7),
         threeMonthsRate: calculateRate(h, 90),
         yearRate: calculateRate(h, 'year')
       }));
-    return { completedThisPeriodCount, totalHabitsCount, globalCompletionRate, habitDetails };
+      
+    const avgRate = totalHabitsCount > 0 
+        ? habitDetails.reduce((acc, h) => acc + calculateRate(h, 1), 0) / totalHabitsCount 
+        : 0;
+
+    return { 
+        totalHabitsCount, 
+        globalCompletionRate: avgRate, 
+        habitDetails,
+        completedThisPeriodCount: habits.filter(h => {
+            const marked = isHabitCompletedForDate(h, selectedDate);
+            return h.type === 'negative' ? !marked : marked;
+        }).length
+    };
   }, [habits, selectedDate]);
 
   const moveHabit = (index: number, direction: 'up' | 'down') => {
@@ -245,33 +298,39 @@ const App: React.FC = () => {
   const renderHabitAnalysis = (habit: Habit) => {
     let history: { completed: boolean }[] = [];
     let label = ""; let sublabel = "";
+    const isNegative = habit.type === 'negative';
+
     if (habit.frequency === 'daily') {
       for (let i = 29; i >= 0; i--) {
         const d = new Date(); d.setDate(d.getDate() - i);
         const iso = getLocalDateString(d);
-        history.push({ completed: habit.completedDates.includes(iso) });
+        const marked = habit.completedDates.includes(iso);
+        // "Completed" en análisis significa "Éxito"
+        history.push({ completed: isNegative ? !marked : marked });
       }
-      label = "Últimos 30 días";
-      sublabel = `${history.filter(h => h.completed).length} de 30 completados`;
+      label = "Últimos 30 días (Éxito)";
+      sublabel = `${history.filter(h => h.completed).length} de 30 días sin fallar`;
     } else if (habit.frequency === 'weekly') {
       for (let i = 11; i >= 0; i--) {
         const d = new Date(); d.setDate(d.getDate() - (i * 7));
         const start = getStartOfWeek(d);
         const end = getLocalDateString(new Date(new Date(start).getTime() + 6 * 24 * 60 * 60 * 1000));
-        history.push({ completed: habit.completedDates.some(cd => cd >= start && cd <= end) });
+        const marked = habit.completedDates.some(cd => cd >= start && cd <= end);
+        history.push({ completed: isNegative ? !marked : marked });
       }
-      label = "Últimas 12 semanas";
-      sublabel = `${history.filter(h => h.completed).length} de 12 completadas`;
+      label = "Últimas 12 semanas (Éxito)";
+      sublabel = `${history.filter(h => h.completed).length} de 12 semanas limpio`;
     } else {
       for (let i = 11; i >= 0; i--) {
         const d = new Date(); d.setMonth(d.getMonth() - i);
         const m = d.getMonth(); const y = d.getFullYear();
         const start = getLocalDateString(new Date(y, m, 1));
         const end = getLocalDateString(new Date(y, m + 1, 0));
-        history.push({ completed: habit.completedDates.some(cd => cd >= start && cd <= end) });
+        const marked = habit.completedDates.some(cd => cd >= start && cd <= end);
+        history.push({ completed: isNegative ? !marked : marked });
       }
-      label = "Últimos 12 meses";
-      sublabel = `${history.filter(h => h.completed).length} de 12 completados`;
+      label = "Últimos 12 meses (Éxito)";
+      sublabel = `${history.filter(h => h.completed).length} de 12 meses de victoria`;
     }
     return (
       <div className="mt-6 pt-6 border-t border-black/5 animate-in fade-in slide-in-from-top-2">
@@ -280,11 +339,11 @@ const App: React.FC = () => {
             <p className="text-[10px] font-black uppercase text-black/30 tracking-wider mb-0.5">{label}</p>
             <p className="text-xs font-bold text-black/60">{sublabel}</p>
           </div>
-          <p className="text-[9px] font-bold text-black/20">Total: {habit.completedDates.length}</p>
+          <p className="text-[9px] font-bold text-black/20">{isNegative ? 'Caídas' : 'Completados'}: {habit.completedDates.length}</p>
         </div>
         <div className="grid grid-cols-6 gap-2.5">
            {history.map((item, idx) => (
-              <div key={idx} className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all ${item.completed ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-white/40 border-black/5 text-black/10'}`}>
+              <div key={idx} className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all ${item.completed ? (isNegative ? 'bg-emerald-600 border-emerald-600' : 'bg-orange-600 border-orange-600') + ' text-white shadow-sm' : 'bg-white/40 border-black/5 text-black/10'}`}>
                 {item.completed && <Icons.Check />}
               </div>
             ))}
@@ -355,7 +414,7 @@ const App: React.FC = () => {
               <div className={`mb-8 rounded-[32px] p-7 shadow-xl relative overflow-hidden text-orange-50 animate-in zoom-in duration-300 transition-all ${isPast ? 'bg-orange-800' : 'bg-orange-700'}`}>
                 <div className="relative z-10">
                   <p className="text-[10px] font-bold mb-1 uppercase tracking-widest opacity-60">
-                    {isPast ? `Progreso el ${selectedDate}` : 'Progreso del día'}
+                    {isPast ? `Progreso el ${selectedDate}` : 'Rendimiento diario'}
                   </p>
                   <div className="flex items-baseline gap-2">
                     <h2 className="text-5xl font-black">{Math.round(stats.globalCompletionRate)}%</h2>
@@ -399,11 +458,15 @@ const App: React.FC = () => {
               {stats.habitDetails.map(habit => {
                 const tagData = userTags.find(t => t.name === habit.category);
                 const theme = getTagStyles(habit.category, tagData?.colorIndex);
+                const isNegative = habit.type === 'negative';
                 return (
-                  <div key={habit.id} onClick={() => setExpandedHabitId(expandedHabitId === habit.id ? null : habit.id)} className={`border-2 rounded-[32px] p-6 shadow-sm cursor-pointer transition-all duration-300 ${theme.card} ${expandedHabitId === habit.id ? 'shadow-lg border-black/10' : 'border-transparent'}`}>
+                  <div key={habit.id} onClick={() => setExpandedHabitId(expandedHabitId === habit.id ? null : habit.id)} className={`border-2 rounded-[32px] p-6 shadow-sm cursor-pointer transition-all duration-300 ${theme.card} ${expandedHabitId === habit.id ? 'shadow-lg border-black/10' : 'border-transparent'} ${isNegative && expandedHabitId !== habit.id ? 'border-rose-100' : ''}`}>
                     <div className="flex flex-col gap-5">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-black text-orange-950 truncate text-lg mb-1">{habit.name}</h4>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-black text-orange-950 truncate text-lg">{habit.name}</h4>
+                          {isNegative && <Icons.Alert />}
+                        </div>
                         <div className="flex items-center gap-2">
                           <span className={`text-[8px] font-black uppercase tracking-[0.1em] px-1.5 py-0.5 rounded-md border shrink-0 ${theme.tag}`}>
                             {habit.category}
@@ -411,13 +474,14 @@ const App: React.FC = () => {
                           <span className="text-[8px] opacity-40 uppercase font-black tracking-widest">
                             {habit.frequency === 'daily' ? 'Diario' : habit.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
                           </span>
+                          {isNegative && <span className="text-[8px] font-black text-rose-500 uppercase">Negativo</span>}
                         </div>
                       </div>
                       <div className="grid grid-cols-3 gap-3">
                         {[{l:'Semana', r: habit.weekRate}, {l:'3 Meses', r: habit.threeMonthsRate}, {l:'Año', r: habit.yearRate}].map((s, i) => (
                           <div key={i} className="bg-white/60 border border-white rounded-2xl p-3 flex flex-col items-center shadow-sm">
                             <span className="text-[8px] font-black uppercase text-black/30 mb-1">{s.l}</span>
-                            <span className={`text-lg font-black ${theme.accent}`}>{s.r}%</span>
+                            <span className={`text-lg font-black ${isNegative ? 'text-rose-600' : theme.accent}`}>{s.r}%</span>
                           </div>
                         ))}
                       </div>
@@ -459,6 +523,13 @@ const App: React.FC = () => {
                 <input required value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-6 py-5 rounded-[24px] border border-black/5 bg-white font-bold" placeholder="¿Qué harás hoy?" />
               </div>
               <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-1">Tipo de Hábito</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setNewType('positive')} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${newType === 'positive' ? 'bg-orange-700 border-orange-700 text-white shadow-md' : 'bg-white border-black/5 text-black/20'}`}>Positivo</button>
+                  <button type="button" onClick={() => setNewType('negative')} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${newType === 'negative' ? 'bg-rose-700 border-rose-700 text-white shadow-md' : 'bg-white border-black/5 text-black/20'}`}>Negativo</button>
+                </div>
+              </div>
+              <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-1">Etiqueta</p>
                 <div className="flex flex-wrap gap-2">
                   {userTags.map(tag => {
@@ -493,6 +564,13 @@ const App: React.FC = () => {
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-1">Nombre</p>
                 <input required value={editingHabit.name} onChange={e => setEditingHabit({...editingHabit, name: e.target.value})} className="w-full px-6 py-5 rounded-[24px] border border-black/5 bg-white font-bold" />
+              </div>
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-1">Tipo de Hábito</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setEditingHabit({...editingHabit, type: 'positive'})} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${editingHabit.type === 'positive' ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5'}`}>Positivo</button>
+                  <button type="button" onClick={() => setEditingHabit({...editingHabit, type: 'negative'})} className={`py-4 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${editingHabit.type === 'negative' ? 'bg-rose-700 border-rose-700 text-white' : 'bg-white border-black/5'}`}>Negativo</button>
+                </div>
               </div>
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-1">Etiqueta</p>
@@ -567,17 +645,28 @@ const App: React.FC = () => {
             <h3 className="text-xl font-black mb-4 text-center">Log Histórico</h3>
             <input type="date" value={pastDateToLog} max={today} onChange={e => setPastDateToLog(e.target.value)} className="w-full p-4 rounded-2xl border mb-4 font-bold border-black/5 bg-white text-center" />
             <div className="flex p-1 bg-black/5 rounded-2xl mb-6">
-               <button onClick={() => setIsPastDateCompleted(true)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${isPastDateCompleted ? 'bg-orange-600 text-white shadow-sm' : 'opacity-40'}`}>Hecho</button>
-               <button onClick={() => setIsPastDateCompleted(false)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${!isPastDateCompleted ? 'bg-orange-600 text-white shadow-sm' : 'opacity-40'}`}>No</button>
+               <button onClick={() => setIsPastDateCompleted(true)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${isPastDateCompleted ? 'bg-orange-600 text-white shadow-sm' : 'opacity-40'}`}>{selectedHabitForPastDate.type === 'negative' ? 'Caída' : 'Hecho'}</button>
+               <button onClick={() => setIsPastDateCompleted(false)} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase ${!isPastDateCompleted ? 'bg-orange-600 text-white shadow-sm' : 'opacity-40'}`}>{selectedHabitForPastDate.type === 'negative' ? 'Limpio' : 'No'}</button>
             </div>
             <div className="flex gap-2">
                <button onClick={() => setIsPastDateModalOpen(false)} className="flex-1 text-[10px] font-black uppercase opacity-40">Atrás</button>
                <button onClick={() => {
                  setHabits(prev => prev.map(h => {
                    if (h.id === selectedHabitForPastDate.id) {
+                     const markedNow = isPastDateCompleted;
                      let dates = [...h.completedDates];
-                     if (isPastDateCompleted && !dates.includes(pastDateToLog)) { dates.push(pastDateToLog); syncToGoogleSheets(h, 1, pastDateToLog); }
-                     else if (!isPastDateCompleted) { dates = dates.filter(d => d !== pastDateToLog); syncToGoogleSheets(h, 0, pastDateToLog); }
+                     
+                     let sheetValue: number;
+                     if (h.type === 'negative') {
+                         sheetValue = markedNow ? 0 : 1;
+                     } else {
+                         sheetValue = markedNow ? 1 : 0;
+                     }
+
+                     if (markedNow && !dates.includes(pastDateToLog)) { dates.push(pastDateToLog); }
+                     else if (!markedNow) { dates = dates.filter(d => d !== pastDateToLog); }
+                     
+                     syncToGoogleSheets(h, sheetValue, pastDateToLog);
                      return { ...h, completedDates: dates };
                    }
                    return h;

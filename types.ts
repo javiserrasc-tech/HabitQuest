@@ -9,6 +9,7 @@ export interface Habit {
   name: string;
   description: string;
   category: string; // Refers to UserTag.name
+  type: 'positive' | 'negative';
   frequency: 'daily' | 'weekly' | 'monthly';
   color: string;
   completedDates: string[]; // ISO Strings YYYY-MM-DD
