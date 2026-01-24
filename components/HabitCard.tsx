@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Habit, UserTag } from '../types';
+import { Habit, UserTag, HabitStatus } from '../types';
 import { getTagStyles, Icons } from '../constants';
 
 interface HabitCardProps {
@@ -10,10 +10,12 @@ interface HabitCardProps {
   onDelete: (id: number) => void;
   onLogPast: (habit: Habit) => void;
   onEdit: (habit: Habit) => void;
-  isCompletedToday: boolean;
+  status: HabitStatus;
   isReorderMode?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
 const HabitCard: React.FC<HabitCardProps> = ({ 
@@ -23,10 +25,12 @@ const HabitCard: React.FC<HabitCardProps> = ({
   onDelete, 
   onLogPast, 
   onEdit, 
-  isCompletedToday,
+  status,
   isReorderMode,
   onMoveUp,
-  onMoveDown
+  onMoveDown,
+  isFirst,
+  isLast
 }) => {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
@@ -94,11 +98,26 @@ const HabitCard: React.FC<HabitCardProps> = ({
 
   const isNegative = habit.type === 'negative';
 
+  const getStatusStyles = () => {
+    switch (status) {
+      case 'success':
+        return 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-200/50';
+      case 'failure':
+        return 'bg-rose-600 border-rose-600 text-white shadow-md shadow-rose-200/50';
+      default:
+        return 'bg-white text-orange-200 border-orange-100 hover:border-orange-200';
+    }
+  };
+
+  const getCardOverlay = () => {
+    if (status === 'success') return 'border-emerald-100 bg-emerald-50/20';
+    if (status === 'failure') return 'border-rose-100 bg-rose-50/20';
+    return theme.card + ' border-transparent';
+  };
+
   return (
-    <div className={`relative rounded-[32px] p-5 shadow-sm border-2 transition-all duration-300 ${theme.card} ${
-      isCompletedToday 
-      ? 'opacity-70 grayscale-[0.3] border-black/5' 
-      : isNegative ? 'border-rose-200' : 'border-transparent'
+    <div className={`relative rounded-[32px] p-5 shadow-sm border-2 transition-all duration-300 ${getCardOverlay()} ${
+      status !== 'neutral' ? 'opacity-90' : ''
     }`}>
       <div className="flex flex-col gap-4">
         
@@ -106,7 +125,7 @@ const HabitCard: React.FC<HabitCardProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             {isNegative && (
-              <span className="text-rose-500 animate-pulse">
+              <span className="text-rose-400">
                 <Icons.Alert />
               </span>
             )}
@@ -124,8 +143,24 @@ const HabitCard: React.FC<HabitCardProps> = ({
           <div className="flex items-center gap-0.5">
             {isReorderMode ? (
               <div className="flex gap-1">
-                <button onClick={onMoveUp} className="p-1.5 rounded-lg bg-white/60 text-black/40 border border-black/5"><Icons.Up /></button>
-                <button onClick={onMoveDown} className="p-1.5 rounded-lg bg-white/60 text-black/40 border border-black/5"><Icons.Down /></button>
+                {!isFirst && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }} 
+                    className="p-1.5 rounded-lg bg-white/80 text-orange-700 border border-orange-100 shadow-sm active:scale-90 transition-transform"
+                    title="Subir"
+                  >
+                    <Icons.Up />
+                  </button>
+                )}
+                {!isLast && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }} 
+                    className="p-1.5 rounded-lg bg-white/80 text-orange-700 border border-orange-100 shadow-sm active:scale-90 transition-transform"
+                    title="Bajar"
+                  >
+                    <Icons.Down />
+                  </button>
+                )}
               </div>
             ) : (
               <div className="flex">
@@ -140,26 +175,20 @@ const HabitCard: React.FC<HabitCardProps> = ({
         {/* Fila Inferior: Botonocito de completar (izquierda) + Nombre (ocupa el resto) */}
         <div className="flex items-center gap-4">
           <button 
+            disabled={isReorderMode}
             onClick={() => onToggle(habit.id)} 
-            className={`w-11 h-11 shrink-0 rounded-2xl flex items-center justify-center transition-all duration-300 border-2 ${
-              isCompletedToday 
-              ? (isNegative ? 'bg-rose-600 border-rose-600' : 'bg-orange-600 border-orange-600') + ' text-white shadow-md' 
-              : 'bg-white text-orange-200 border-orange-100 hover:border-orange-200 active:scale-90'
-            }`}
+            className={`w-11 h-11 shrink-0 rounded-2xl flex items-center justify-center transition-all duration-300 border-2 active:scale-90 ${getStatusStyles()} ${isReorderMode ? 'opacity-20 grayscale cursor-default' : ''}`}
           >
-            {isCompletedToday ? <Icons.Check /> : <div className={`w-4 h-4 rounded-full border-2 border-current opacity-20`} />}
+            {status === 'success' ? <Icons.Check /> : status === 'failure' ? <Icons.X /> : <div className={`w-4 h-4 rounded-full border-2 border-current opacity-20`} />}
           </button>
           
           <div className="flex-1 min-w-0">
-            <h3 className={`font-bold text-orange-950 text-lg leading-tight transition-all break-words ${isCompletedToday ? 'line-through opacity-40' : ''}`}>
+            <h3 className={`font-bold text-orange-950 text-lg leading-tight transition-all break-words ${status === 'success' ? 'opacity-50' : status === 'failure' ? 'text-rose-900' : ''}`}>
               {habit.name}
             </h3>
-            {isNegative && !isCompletedToday && (
-              <p className="text-[8px] font-black uppercase text-rose-400 mt-1 tracking-wider">¡No caigas!</p>
-            )}
-            {isNegative && isCompletedToday && (
-              <p className="text-[8px] font-black uppercase text-rose-600 mt-1 tracking-wider">Caído hoy</p>
-            )}
+            {status === 'success' && <p className="text-[8px] font-black uppercase text-emerald-600 mt-1 tracking-wider">¡Bien hecho!</p>}
+            {status === 'failure' && <p className="text-[8px] font-black uppercase text-rose-600 mt-1 tracking-wider">Mañana será mejor</p>}
+            {status === 'neutral' && isNegative && <p className="text-[8px] font-black uppercase text-rose-400 mt-1 tracking-wider">Resiste hoy</p>}
           </div>
         </div>
       </div>

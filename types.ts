@@ -1,4 +1,6 @@
 
+export type HabitStatus = 'success' | 'failure' | 'neutral';
+
 export interface UserTag {
   name: string;
   colorIndex: number;
@@ -12,7 +14,9 @@ export interface Habit {
   type: 'positive' | 'negative';
   frequency: 'daily' | 'weekly' | 'monthly';
   color: string;
-  completedDates: string[]; // ISO Strings YYYY-MM-DD
+  // completions stores the status for each date. 
+  // Dates are YYYY-MM-DD. 'neutral' is implied if date is missing.
+  completions: Record<string, 'success' | 'failure'>; 
   createdAt: string;
   streak: number;
 }
