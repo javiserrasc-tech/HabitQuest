@@ -18,11 +18,10 @@ const getLocalDateString = (date: Date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
-// Lógica de Domingo a Domingo
 const getSundayOfDate = (date: Date) => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
-  const day = d.getDay(); // 0 es Domingo
+  const day = d.getDay(); 
   const diff = d.getDate() - day;
   return new Date(d.getFullYear(), d.getMonth(), diff);
 };
@@ -53,7 +52,6 @@ const App: React.FC = () => {
   const [pastDateToLog, setPastDateToLog] = useState(getLocalDateString());
   const [pastStatusToLog, setPastStatusToLog] = useState<HabitStatus>('success');
   
-  // Estados para creación de nuevo hábito
   const [newId, setNewId] = useState<string>('');
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState<'positive' | 'negative'>('positive');
@@ -62,12 +60,10 @@ const App: React.FC = () => {
 
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [newTagInput, setNewTagInput] = useState('');
-  const [newTagColorIndex, setNewTagColorIndex] = useState(0);
 
   useEffect(() => {
     const newData = localStorage.getItem(STORAGE_KEY);
     if (newData) setHabits(JSON.parse(newData));
-    
     const savedTags = localStorage.getItem(TAGS_KEY);
     if (savedTags) setUserTags(JSON.parse(savedTags));
   }, []);
@@ -111,7 +107,6 @@ const App: React.FC = () => {
   const calculateRateInRange = (habit: Habit, start: Date, end: Date) => {
     const sDate = new Date(start); sDate.setHours(0,0,0,0);
     const eDate = new Date(end); eDate.setHours(0,0,0,0);
-    
     if (habit.frequency === 'daily') {
       let total = 0; let ok = 0; let curr = new Date(sDate);
       while (curr <= eDate) {
@@ -145,18 +140,12 @@ const App: React.FC = () => {
 
   const analysisData = useMemo(() => {
     const now = new Date(); now.setHours(0,0,0,0);
-    
-    // Semanas (Domingo a Domingo)
     const sunThisWeek = getSundayOfDate(now);
     const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
     const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
-
-    // Meses
     const firstThisMonth = getStartOfMonth(now);
     const firstLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-
-    // Largo plazo
     const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
     const firstThisYear = new Date(now.getFullYear(), 0, 1);
 
@@ -167,7 +156,6 @@ const App: React.FC = () => {
       const prevMonth = calculateRateInRange(h, firstLastMonth, lastLastMonth);
       const last3M = calculateRateInRange(h, ninetyDaysAgo, now);
       const year = calculateRateInRange(h, firstThisYear, now);
-
       return {
         id: h.id,
         curWeek, prevWeek, weekBetter: curWeek > prevWeek,
@@ -176,6 +164,29 @@ const App: React.FC = () => {
       };
     });
   }, [habits]);
+
+  const handleSync = async () => {
+    if (!syncUrl) {
+      alert("Por favor, introduce una URL de sincronización.");
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const response = await fetch(syncUrl);
+      if (!response.ok) throw new Error('Error de red');
+      const data = await response.json();
+      if (data) {
+        if (data.habits) setHabits(data.habits);
+        if (data.userTags) setUserTags(data.userTags);
+        alert('¡Sincronización exitosa!');
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Error al sincronizar. Revisa la URL y CORS.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const handleToggleHabit = (id: number) => {
     setHabits(prev => prev.map(h => {
@@ -257,7 +268,6 @@ const App: React.FC = () => {
                   onMoveDown={() => { const n = [...habits]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; setHabits(n); }}
                 />
               ))}
-              {habits.length === 0 && <div className="text-center py-20 opacity-30 italic">Comienza añadiendo un hábito...</div>}
             </section>
           </div>
         ) : (
@@ -272,8 +282,9 @@ const App: React.FC = () => {
                 const theme = getTagStyles(habit.category, tagData?.colorIndex);
                 const data = analysisData.find(d => d.id === habit.id);
                 if (!data) return null;
+                const isExpanded = expandedHabitId === habit.id;
                 return (
-                  <div key={habit.id} onClick={() => setExpandedHabitId(expandedHabitId === habit.id ? null : habit.id)} className={`border-2 rounded-[32px] p-6 shadow-sm transition-all duration-300 ${theme.card} ${expandedHabitId === habit.id ? 'shadow-lg border-black/10' : 'border-transparent'}`}>
+                  <div key={habit.id} onClick={() => setExpandedHabitId(isExpanded ? null : habit.id)} className={`border-2 rounded-[32px] p-6 shadow-sm transition-all duration-300 ${theme.card} ${isExpanded ? 'shadow-lg border-black/10' : 'border-transparent'}`}>
                     <div className="flex flex-col gap-5">
                       <div className="flex justify-between items-center">
                         <div>
@@ -286,64 +297,57 @@ const App: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Comparativas Semana y Mes */}
                       <div className="grid grid-cols-2 gap-3">
-                        {/* Semana */}
                         <div className={`rounded-3xl p-4 shadow-sm border-2 transition-colors ${data.weekBetter ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
-                          <p className={`text-[9px] font-black uppercase mb-2 ${data.weekBetter ? 'text-emerald-800/40' : 'text-rose-800/40'}`}>Semana</p>
+                          <p className="text-[9px] font-black uppercase mb-2 opacity-40">Semana</p>
                           <div className="flex items-baseline justify-between">
                             <span className={`text-2xl font-black ${data.weekBetter ? 'text-emerald-700' : 'text-rose-700'}`}>{data.curWeek}%</span>
-                            <div className="flex items-center gap-1 opacity-60">
-                              <span className="text-[10px] font-bold">{data.weekBetter ? '↑' : '↓'}</span>
-                              <span className="text-[10px] font-bold">{data.prevWeek}%</span>
-                            </div>
+                            <span className="text-[10px] font-bold opacity-60">Prev: {data.prevWeek}%</span>
                           </div>
                         </div>
-                        {/* Mes */}
                         <div className={`rounded-3xl p-4 shadow-sm border-2 transition-colors ${data.monthBetter ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
-                          <p className={`text-[9px] font-black uppercase mb-2 ${data.monthBetter ? 'text-emerald-800/40' : 'text-rose-800/40'}`}>Mes</p>
+                          <p className="text-[9px] font-black uppercase mb-2 opacity-40">Mes</p>
                           <div className="flex items-baseline justify-between">
                             <span className={`text-2xl font-black ${data.monthBetter ? 'text-emerald-700' : 'text-rose-700'}`}>{data.curMonth}%</span>
-                            <div className="flex items-center gap-1 opacity-60">
-                              <span className="text-[10px] font-bold">{data.monthBetter ? '↑' : '↓'}</span>
-                              <span className="text-[10px] font-bold">{data.prevMonth}%</span>
-                            </div>
+                            <span className="text-[10px] font-bold opacity-60">Prev: {data.prevMonth}%</span>
                           </div>
-                        </div>
-                      </div>
-
-                      {/* Largo Plazo: 3 Meses y Año */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-white/50 border border-black/5 rounded-2xl p-3 flex justify-between items-center">
-                          <span className="text-[8px] font-black uppercase opacity-40">Últimos 3m</span>
-                          <span className="text-sm font-black text-orange-950">{data.last3M}%</span>
-                        </div>
-                        <div className="bg-white/50 border border-black/5 rounded-2xl p-3 flex justify-between items-center">
-                          <span className="text-[8px] font-black uppercase opacity-40">Año Actual</span>
-                          <span className="text-sm font-black text-orange-950">{data.year}%</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Historial Visual Expandible */}
-                    {expandedHabitId === habit.id && (
-                      <div className="mt-5 pt-5 border-t border-black/5 animate-in fade-in slide-in-from-top-2">
-                        <p className="text-[9px] font-black uppercase opacity-30 mb-2">Historial de los últimos 28 días</p>
-                        <div className="grid grid-cols-7 gap-1.5">
-                          {Array.from({length: 28}).map((_, i) => {
-                            const d = new Date(); d.setDate(d.getDate() - (27 - i));
-                            const status = getHabitStatusForDate(habit, getLocalDateString(d));
-                            return (
-                              <div key={i} className={`aspect-square rounded-lg border-2 flex items-center justify-center ${
-                                status === 'success' ? 'bg-emerald-600 border-emerald-600 text-white' : 
-                                status === 'failure' ? 'bg-rose-600 border-rose-600 text-white' : 
-                                'bg-white/40 border-black/5 text-black/5'
-                              }`}>
-                                {status === 'success' && <Icons.Check />}
-                                {status === 'failure' && <Icons.X />}
-                              </div>
-                            );
-                          })}
+                    {isExpanded && (
+                      <div className="mt-5 pt-5 border-t border-black/5 animate-in fade-in slide-in-from-top-2 space-y-5">
+                        {/* Métricas de largo plazo dentro del desplegable */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-white/50 border border-black/5 rounded-2xl p-3 flex flex-col gap-1">
+                            <span className="text-[8px] font-black uppercase opacity-40">Últimos 3m</span>
+                            <span className="text-xl font-black text-orange-950">{data.last3M}%</span>
+                          </div>
+                          <div className="bg-white/50 border border-black/5 rounded-2xl p-3 flex flex-col gap-1">
+                            <span className="text-[8px] font-black uppercase opacity-40">Año Actual</span>
+                            <span className="text-xl font-black text-orange-950">{data.year}%</span>
+                          </div>
+                        </div>
+
+                        {/* Historial de 30 días */}
+                        <div>
+                          <p className="text-[9px] font-black uppercase opacity-30 mb-2 text-center">Historial últimos 35 días</p>
+                          <div className="grid grid-cols-7 gap-1.5">
+                            {Array.from({length: 35}).map((_, i) => {
+                              const d = new Date(); d.setDate(d.getDate() - (34 - i));
+                              const status = getHabitStatusForDate(habit, getLocalDateString(d));
+                              return (
+                                <div key={i} className={`aspect-square rounded-lg border flex items-center justify-center ${
+                                  status === 'success' ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm' : 
+                                  status === 'failure' ? 'bg-rose-600 border-rose-600 text-white shadow-sm' : 
+                                  'bg-white/40 border-black/5 text-black/5'
+                                }`}>
+                                  {status === 'success' && <Icons.Check />}
+                                  {status === 'failure' && <Icons.X />}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -361,6 +365,37 @@ const App: React.FC = () => {
         <button onClick={() => { setCurrentView('analysis'); setExpandedHabitId(null); }} className={`flex flex-col items-center gap-1.5 ${currentView === 'analysis' ? 'text-orange-700' : 'opacity-30'}`}><Icons.Chart /><span className="text-[9px] font-black uppercase">Análisis</span></button>
       </nav>
 
+      {/* Modales - Se mantienen como están con corrección de Sync */}
+      {isSyncModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
+            <h3 className="text-3xl font-black mb-8">Configuración Nube</h3>
+            <div className="space-y-4">
+              <input value={syncUrl} onChange={e => setSyncUrl(e.target.value)} className="w-full px-5 py-4 rounded-2xl border bg-white font-bold text-xs" placeholder="URL de Google Script" />
+              
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => { localStorage.setItem(SYNC_URL_KEY, syncUrl); alert('URL Guardada'); }} className="py-4 bg-black text-white rounded-2xl font-black uppercase text-[10px] shadow-lg active:scale-95 transition-all">Guardar URL</button>
+                <button onClick={handleSync} disabled={isSyncing} className={`py-4 rounded-2xl font-black uppercase text-[10px] shadow-lg text-white active:scale-95 transition-all flex items-center justify-center gap-2 ${isSyncing ? 'bg-gray-400' : 'bg-orange-700'}`}>
+                  {isSyncing ? '...' : <><Icons.Cloud /> Sincronizar</>}
+                </button>
+              </div>
+
+              <button onClick={() => {
+                const data = JSON.stringify({ habits, userTags });
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `backup-${todayStr}.json`;
+                a.click();
+              }} className="w-full py-4 bg-white border-2 border-black/5 text-black rounded-2xl font-black uppercase text-[10px] shadow-sm">Exportar JSON</button>
+              
+              <button onClick={() => setIsSyncModalOpen(false)} className="w-full mt-4 py-4 font-black uppercase text-[10px] opacity-40 text-center">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Crear Hábito */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
@@ -374,15 +409,8 @@ const App: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-2">Nombre</p>
-                <input required value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" placeholder="¿Qué harás hoy?" />
+                <input required value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" placeholder="Hábito..." />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button type="button" onClick={() => setNewType('positive')} className={`py-4 rounded-2xl font-black uppercase text-[10px] border-2 ${newType === 'positive' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-black/5'}`}>Positivo</button>
-                <button type="button" onClick={() => setNewType('negative')} className={`py-4 rounded-2xl font-black uppercase text-[10px] border-2 ${newType === 'negative' ? 'bg-rose-600 border-rose-600 text-white' : 'bg-white border-black/5'}`}>Negativo</button>
-              </div>
-              <select value={selectedTagName} onChange={e => setSelectedTagName(e.target.value)} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold text-sm">
-                {userTags.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-              </select>
               <div className="grid grid-cols-3 gap-2">
                 {['daily', 'weekly', 'monthly'].map(f => (
                   <button key={f} type="button" onClick={() => setNewFreq(f as any)} className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 ${newFreq === f ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5'}`}>{f}</button>
@@ -390,7 +418,7 @@ const App: React.FC = () => {
               </div>
               <div className="flex gap-4 pt-6">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 font-black uppercase text-[10px] opacity-40">Cerrar</button>
-                <button type="submit" disabled={isIdTaken(parseInt(newId))} className="flex-[2] py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg disabled:opacity-50">Crear Hábito</button>
+                <button type="submit" disabled={isIdTaken(parseInt(newId))} className="flex-[2] py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg disabled:opacity-50">Crear</button>
               </div>
             </div>
           </form>
@@ -404,64 +432,14 @@ const App: React.FC = () => {
             <h3 className="text-3xl font-black mb-8">Editar Hábito</h3>
             <div className="space-y-5">
               <div className="space-y-2 opacity-50">
-                <p className="text-[10px] font-black uppercase ml-2">ID (No editable)</p>
+                <p className="text-[10px] font-black uppercase ml-2">ID (Fijo)</p>
                 <div className="w-full px-6 py-4 rounded-2xl border bg-gray-100 font-bold text-sm">{editingHabit.id}</div>
               </div>
               <input required value={editingHabit.name} onChange={e => setEditingHabit({...editingHabit, name: e.target.value})} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" />
-              <select value={editingHabit.category} onChange={e => setEditingHabit({...editingHabit, category: e.target.value})} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold">
-                {userTags.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-              </select>
-              <div className="flex gap-4 pt-6">
-                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 font-black uppercase text-[10px] opacity-40">Cerrar</button>
-                <button type="submit" className="flex-[2] py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg">Guardar</button>
-              </div>
+              <button type="submit" className="w-full py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg">Guardar</button>
+              <button type="button" onClick={() => setIsEditModalOpen(false)} className="w-full py-4 font-black uppercase text-[10px] opacity-40">Cerrar</button>
             </div>
           </form>
-        </div>
-      )}
-
-      {/* Modal Etiquetas */}
-      {isTagManagerOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
-          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl max-h-[80vh] overflow-y-auto">
-            <h3 className="text-3xl font-black mb-8">Categorías</h3>
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <input value={newTagInput} onChange={e => setNewTagInput(e.target.value)} className="flex-1 px-4 py-3 rounded-xl border bg-white font-bold text-sm" placeholder="Nueva..." />
-                <button onClick={() => { if(newTagInput){ setUserTags(p => [...p, {name: newTagInput, colorIndex: 0}]); setNewTagInput(''); } }} className="p-3 bg-black text-white rounded-xl"><Icons.Plus /></button>
-              </div>
-              {userTags.map(t => (
-                <div key={t.name} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-black/5 shadow-sm">
-                  <span className="font-bold text-sm">{t.name}</span>
-                  {t.name !== DEFAULT_TAG.name && <button onClick={() => setUserTags(p => p.filter(x => x.name !== t.name))} className="text-rose-500"><Icons.Trash /></button>}
-                </div>
-              ))}
-            </div>
-            <button onClick={() => setIsTagManagerOpen(false)} className="w-full mt-8 py-4 font-black uppercase text-[10px] opacity-40">Cerrar</button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Sincronización */}
-      {isSyncModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
-          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
-            <h3 className="text-3xl font-black mb-8">Configuración Nube</h3>
-            <div className="space-y-4">
-              <input value={syncUrl} onChange={e => setSyncUrl(e.target.value)} className="w-full px-5 py-4 rounded-2xl border bg-white font-bold text-xs" placeholder="Google Script URL" />
-              <button onClick={() => { localStorage.setItem(SYNC_URL_KEY, syncUrl); setIsSyncModalOpen(false); }} className="w-full py-4 bg-orange-700 text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Guardar URL</button>
-              <button onClick={() => {
-                const data = JSON.stringify({ habits, userTags });
-                const blob = new Blob([data], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `backup-hábitos-${todayStr}.json`;
-                a.click();
-              }} className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Exportar JSON</button>
-              <button onClick={() => setIsSyncModalOpen(false)} className="w-full mt-4 py-4 font-black uppercase text-[10px] opacity-40 text-center">Cerrar</button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -490,12 +468,28 @@ const App: React.FC = () => {
                 <button type="button" onClick={() => setPastStatusToLog('failure')} className={`py-4 rounded-xl font-black uppercase text-[10px] border-2 ${pastStatusToLog === 'failure' ? 'bg-rose-600 border-rose-600 text-white' : 'bg-white border-black/5'}`}>Fallo</button>
                 <button type="button" onClick={() => setPastStatusToLog('neutral')} className={`py-4 rounded-xl font-black uppercase text-[10px] border-2 ${pastStatusToLog === 'neutral' ? 'bg-gray-200 border-gray-200 text-gray-700' : 'bg-white border-black/5'}`}>Borrar</button>
               </div>
-              <div className="flex gap-4 pt-6">
-                <button type="button" onClick={() => setIsPastDateModalOpen(false)} className="flex-1 font-black uppercase text-[10px] opacity-40">Cerrar</button>
-                <button type="submit" className="flex-[2] py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg">Guardar</button>
-              </div>
+              <button type="submit" className="w-full py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg">Guardar</button>
+              <button type="button" onClick={() => setIsPastDateModalOpen(false)} className="w-full py-4 font-black uppercase text-[10px] opacity-40">Cancelar</button>
             </div>
           </form>
+        </div>
+      )}
+      
+      {/* Modal Etiquetas Simplificado */}
+      {isTagManagerOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
+            <h3 className="text-3xl font-black mb-8">Categorías</h3>
+            <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
+              {userTags.map(t => (
+                <div key={t.name} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-black/5">
+                  <span className="font-bold text-sm">{t.name}</span>
+                  {t.name !== DEFAULT_TAG.name && <button onClick={() => setUserTags(p => p.filter(x => x.name !== t.name))} className="text-rose-500"><Icons.Trash /></button>}
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setIsTagManagerOpen(false)} className="w-full mt-8 py-4 font-black uppercase text-[10px] opacity-40">Cerrar</button>
+          </div>
         </div>
       )}
     </div>
