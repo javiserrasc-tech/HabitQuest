@@ -312,26 +312,29 @@ const App: React.FC = () => {
     let label = ""; let sublabel = "";
 
     if (habit.frequency === 'daily') {
-      for (let i = 29; i >= 0; i--) {
+      // Show exactly 4 weeks (28 days) to make it look symmetrical with 7 columns
+      for (let i = 27; i >= 0; i--) {
         const d = new Date(); d.setDate(d.getDate() - i);
         const iso = getLocalDateString(d);
         history.push({ status: habit.completions[iso] || 'neutral' });
       }
-      label = "Últimos 30 días";
+      label = "Últimos 28 días (4 semanas)";
       sublabel = `${history.filter(h => h.status === 'success').length} éxitos, ${history.filter(h => h.status === 'failure').length} caídas`;
     } else if (habit.frequency === 'weekly') {
-      for (let i = 11; i >= 0; i--) {
+      // 14 weeks is divisible by 7 and 2, fits better in a grid
+      for (let i = 13; i >= 0; i--) {
         const d = new Date(); d.setDate(d.getDate() - (i * 7));
         history.push({ status: getHabitStatusForDate(habit, getLocalDateString(d)) });
       }
-      label = "Últimas 12 semanas";
+      label = "Últimas 14 semanas";
       sublabel = `${history.filter(h => h.status === 'success').length} semanas cumplidas`;
     } else {
-      for (let i = 11; i >= 0; i--) {
+      // 14 months to keep grid consistent
+      for (let i = 13; i >= 0; i--) {
         const d = new Date(); d.setMonth(d.getMonth() - i);
         history.push({ status: getHabitStatusForDate(habit, getLocalDateString(d)) });
       }
-      label = "Últimos 12 meses";
+      label = "Últimos 14 meses";
       sublabel = `${history.filter(h => h.status === 'success').length} meses logrados`;
     }
 
@@ -343,9 +346,10 @@ const App: React.FC = () => {
             <p className="text-xs font-bold text-black/60">{sublabel}</p>
           </div>
         </div>
-        <div className="grid grid-cols-6 gap-2.5">
+        {/* Changed grid-cols-6 to grid-cols-7 for full weeks */}
+        <div className="grid grid-cols-7 gap-1.5">
            {history.map((item, idx) => (
-              <div key={idx} className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all ${
+              <div key={idx} className={`aspect-square rounded-lg border-2 flex items-center justify-center transition-all ${
                 item.status === 'success' ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm' : 
                 item.status === 'failure' ? 'bg-rose-600 border-rose-600 text-white shadow-sm' : 
                 'bg-white/40 border-black/5 text-black/10'}`}>
