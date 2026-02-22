@@ -302,7 +302,10 @@ const App: React.FC = () => {
                       <div className="grid grid-cols-2 gap-3">
                         <div className={`rounded-3xl p-4 shadow-sm border-2 ${data.weekBetter ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
                           <p className="text-[9px] font-black uppercase mb-1 opacity-40">Semana</p>
-                          <span className={`text-2xl font-black ${data.weekBetter ? 'text-emerald-700' : 'text-rose-700'}`}>{data.curWeek}%</span>
+                          <div className="flex items-baseline gap-2">
+                            <span className={`text-2xl font-black ${data.weekBetter ? 'text-emerald-700' : 'text-rose-700'}`}>{data.curWeek}%</span>
+                            <span className="text-[10px] font-bold opacity-40">vs {data.prevWeek}%</span>
+                          </div>
                         </div>
                         <div className={`rounded-3xl p-4 shadow-sm border-2 ${data.monthBetter ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
                           <p className="text-[9px] font-black uppercase mb-1 opacity-40">Mes</p>
