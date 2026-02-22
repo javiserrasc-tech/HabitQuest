@@ -65,6 +65,9 @@ const HabitCard: React.FC<HabitCardProps> = ({
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             <span className="text-[9px] font-black text-black/20 bg-black/5 px-2 py-0.5 rounded-md">#{habit.id}</span>
             <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border shrink-0 ${theme.tag}`}>{habit.category}</span>
+            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border border-black/5 bg-black/5 text-black/40 shrink-0">
+              {habit.frequency === 'daily' ? 'Diario' : habit.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
+            </span>
             {habit.streak > 0 && <span className="text-[9px] font-bold text-orange-600">🔥 {habit.streak}</span>}
           </div>
           <div className="flex items-center">

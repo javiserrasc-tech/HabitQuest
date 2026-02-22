@@ -98,14 +98,40 @@ const App: React.FC = () => {
     }
   }, [syncUrl]);
 
+  const updateHabitCompletions = (habit: Habit, dateStr: string, status: HabitStatus) => {
+    const newCompletions = { ...habit.completions };
+    
+    if (habit.frequency !== 'daily') {
+      const date = new Date(dateStr + 'T00:00:00');
+      let start: string, end: string;
+      if (habit.frequency === 'weekly') {
+        const sunday = getSundayOfDate(date);
+        start = getLocalDateString(sunday);
+        end = getLocalDateString(new Date(sunday.getTime() + 6 * 24 * 60 * 60 * 1000));
+      } else {
+        const first = getStartOfMonth(date);
+        start = getLocalDateString(first);
+        end = getLocalDateString(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+      }
+      Object.keys(newCompletions).forEach(d => {
+        if (d >= start && d <= end) delete newCompletions[d];
+      });
+    } else {
+      delete newCompletions[dateStr];
+    }
+
+    if (status !== 'neutral') {
+      newCompletions[dateStr] = status as 'success' | 'failure';
+    }
+    return newCompletions;
+  };
+
   const handleToggleHabit = (id: number) => {
     setHabits(prev => prev.map(h => {
       if (h.id === id) {
         const currentStatus = getHabitStatusForDate(h, selectedDate);
         let nextStatus: HabitStatus = currentStatus === 'neutral' ? 'success' : currentStatus === 'success' ? 'failure' : 'neutral';
-        const newCompletions = { ...h.completions };
-        if (nextStatus === 'neutral') delete newCompletions[selectedDate];
-        else newCompletions[selectedDate] = nextStatus as 'success' | 'failure';
+        const newCompletions = updateHabitCompletions(h, selectedDate, nextStatus);
         syncActionToCloud(h, selectedDate, nextStatus);
         return { ...h, completions: newCompletions, streak: nextStatus === 'success' ? h.streak + 1 : (nextStatus === 'failure' ? 0 : h.streak) };
       }
@@ -406,8 +432,7 @@ const App: React.FC = () => {
             e.preventDefault();
             setHabits(prev => prev.map(h => {
               if (h.id === selectedHabitForPastDate.id) {
-                const nC = { ...h.completions };
-                if (pastStatusToLog === 'neutral') delete nC[pastDateToLog]; else nC[pastDateToLog] = pastStatusToLog as any;
+                const nC = updateHabitCompletions(h, pastDateToLog, pastStatusToLog);
                 syncActionToCloud(h, pastDateToLog, pastStatusToLog);
                 return { ...h, completions: nC };
               }
