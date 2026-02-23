@@ -420,6 +420,21 @@ const App: React.FC = () => {
               <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">ID Sheet (Manual)</p><input required type="number" value={newId} onChange={e => setNewId(e.target.value)} className={`w-full px-6 py-4 rounded-2xl border font-bold ${isIdTaken(parseInt(newId)) ? 'border-rose-500 bg-rose-50' : 'bg-white border-black/5'}`} placeholder="ID..." />{isIdTaken(parseInt(newId)) && <p className="text-[9px] text-rose-500 font-bold ml-2">Este ID ya está en uso</p>}</div>
               <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Nombre</p><input required value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" placeholder="Hábito..." /></div>
               <div className="grid grid-cols-3 gap-2">{['daily', 'weekly', 'monthly'].map(f => (<button key={f} type="button" onClick={() => setNewFreq(f as any)} className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 ${newFreq === f ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5'}`}>{f}</button>))}</div>
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-2">Categoría</p>
+                <div className="flex flex-wrap gap-2">
+                  {userTags.map(tag => (
+                    <button
+                      key={tag.name}
+                      type="button"
+                      onClick={() => setSelectedTagName(tag.name)}
+                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${selectedTagName === tag.name ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5 text-black/40'}`}
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="flex gap-4 pt-6"><button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 font-black uppercase text-[10px] opacity-40">Cerrar</button><button type="submit" disabled={isIdTaken(parseInt(newId))} className="flex-[2] py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg disabled:opacity-50">Crear</button></div>
             </div>
           </form>
@@ -463,6 +478,21 @@ const App: React.FC = () => {
             <div className="space-y-5">
               <div className="space-y-2 opacity-50"><p className="text-[10px] font-black uppercase ml-2">ID Sheet (No editable)</p><div className="w-full px-6 py-4 rounded-2xl border bg-gray-100 font-bold text-sm">{editingHabit.id}</div></div>
               <input required value={editingHabit.name} onChange={e => setEditingHabit({...editingHabit, name: e.target.value})} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" />
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-2">Categoría</p>
+                <div className="flex flex-wrap gap-2">
+                  {userTags.map(tag => (
+                    <button
+                      key={tag.name}
+                      type="button"
+                      onClick={() => setEditingHabit({...editingHabit, category: tag.name})}
+                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${editingHabit.category === tag.name ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5 text-black/40'}`}
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button type="submit" className="w-full py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg">Guardar Cambios</button>
               <button type="button" onClick={() => setIsEditModalOpen(false)} className="w-full py-4 font-black uppercase text-[10px] opacity-40 text-center">Cerrar</button>
             </div>
@@ -474,6 +504,35 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
           <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
             <h3 className="text-3xl font-black mb-8 text-center">Categorías</h3>
+            <div className="mb-6 flex gap-2">
+              <input
+                id="new-tag-input"
+                className="flex-1 px-4 py-3 rounded-xl border bg-white font-bold text-xs"
+                placeholder="Nueva categoría..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const val = (e.target as HTMLInputElement).value.trim();
+                    if (val && !userTags.some(t => t.name === val)) {
+                      setUserTags([...userTags, { name: val, colorIndex: userTags.length % 10 }]);
+                      (e.target as HTMLInputElement).value = '';
+                    }
+                  }
+                }}
+              />
+              <button
+                onClick={() => {
+                  const input = document.getElementById('new-tag-input') as HTMLInputElement;
+                  const val = input.value.trim();
+                  if (val && !userTags.some(t => t.name === val)) {
+                    setUserTags([...userTags, { name: val, colorIndex: userTags.length % 10 }]);
+                    input.value = '';
+                  }
+                }}
+                className="px-4 py-3 bg-orange-700 text-white rounded-xl font-black text-[10px] uppercase"
+              >
+                Añadir
+              </button>
+            </div>
             <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
               {userTags.map(t => (
                 <div key={t.name} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-black/5">
