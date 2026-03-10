@@ -5,7 +5,6 @@ import { Icons, getTagStyles } from './constants';
 import HabitCard from './components/HabitCard';
 
 const STORAGE_KEY = 'habitquest_data_v5';
-const SYNC_URL_KEY = 'habitquest_sync_url';
 const TAGS_KEY = 'habitquest_tags_v4';
 const DEFAULT_TAG: UserTag = { name: 'General', colorIndex: 0 };
 
@@ -46,8 +45,8 @@ const App: React.FC = () => {
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
   const [isPastDateModalOpen, setIsPastDateModalOpen] = useState(false);
   
-  const [syncUrl, setSyncUrl] = useState(localStorage.getItem(SYNC_URL_KEY) || '');
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
+  const [exportStartDate, setExportStartDate] = useState(todayStr);
+  const [exportEndDate, setExportEndDate] = useState(todayStr);
   
   const [selectedHabitForPastDate, setSelectedHabitForPastDate] = useState<Habit | null>(null);
   const [pastDateToLog, setPastDateToLog] = useState(getLocalDateString());
@@ -72,31 +71,6 @@ const App: React.FC = () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(habits));
     localStorage.setItem(TAGS_KEY, JSON.stringify(userTags));
   }, [habits, userTags]);
-
-  const syncActionToCloud = useCallback(async (habit: Habit, date: string, status: HabitStatus) => {
-    if (!syncUrl || !syncUrl.startsWith('https')) return;
-    setSyncStatus('syncing');
-    try {
-      const valorEnviado = status === 'success' ? '1' : status === 'failure' ? '0' : 'Eliminado';
-      const payload = {
-        fecha: date,
-        id_habito: habit.id,
-        nombre_habito: habit.name,
-        valor: valorEnviado
-      };
-      await fetch(syncUrl, {
-        method: 'POST',
-        mode: 'no-cors', 
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      });
-      setSyncStatus('synced');
-      setTimeout(() => setSyncStatus('idle'), 2000);
-    } catch (error) {
-      console.error("Error en sync individual:", error);
-      setSyncStatus('error');
-    }
-  }, [syncUrl]);
 
   const updateHabitCompletions = (habit: Habit, dateStr: string, status: HabitStatus) => {
     const newCompletions = { ...habit.completions };
@@ -132,7 +106,6 @@ const App: React.FC = () => {
         const currentStatus = getHabitStatusForDate(h, selectedDate);
         let nextStatus: HabitStatus = currentStatus === 'neutral' ? 'success' : currentStatus === 'success' ? 'failure' : 'neutral';
         const newCompletions = updateHabitCompletions(h, selectedDate, nextStatus);
-        syncActionToCloud(h, selectedDate, nextStatus);
         return { ...h, completions: newCompletions, streak: nextStatus === 'success' ? h.streak + 1 : (nextStatus === 'failure' ? 0 : h.streak) };
       }
       return h;
@@ -219,6 +192,31 @@ const App: React.FC = () => {
     });
   }, [habits]);
 
+  const handleExportCSV = () => {
+    const start = new Date(exportStartDate + 'T00:00:00');
+    const end = new Date(exportEndDate + 'T00:00:00');
+    let csvContent = "fecha,id_habito,nombre_habito,valor\n";
+    
+    habits.forEach(h => {
+      Object.entries(h.completions).forEach(([dateStr, status]) => {
+        const d = new Date(dateStr + 'T00:00:00');
+        if (d >= start && d <= end) {
+          const valor = status === 'success' ? '1' : '0';
+          csvContent += `${dateStr},${h.id},"${h.name}",${valor}\n`;
+        }
+      });
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `habit_export_${exportStartDate}_${exportEndDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleAddHabit = (e: React.FormEvent) => {
     e.preventDefault();
     const idNum = parseInt(newId);
@@ -238,14 +236,6 @@ const App: React.FC = () => {
           <button onClick={() => setIsReorderMode(!isReorderMode)} className={`p-3 rounded-2xl border shadow-sm ${isReorderMode ? 'bg-orange-600 text-white' : 'bg-white/60 border-black/5 text-black/60'}`}><Icons.Move /></button>
         </div>
         <div className="flex items-center gap-2">
-          {syncStatus !== 'idle' && (
-            <span className={`text-[8px] font-black uppercase tracking-tighter px-2 py-1 rounded-full border ${
-              syncStatus === 'syncing' ? 'bg-amber-100 text-amber-700 animate-pulse border-amber-200' :
-              syncStatus === 'synced' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-rose-100 text-rose-700 border-rose-200'
-            }`}>
-              {syncStatus === 'syncing' ? 'Guardando...' : syncStatus === 'synced' ? 'Sheet OK' : 'Error'}
-            </span>
-          )}
           <button onClick={() => setIsSyncModalOpen(true)} className="p-3 rounded-2xl border bg-white/60 border-black/5 text-black/60 shadow-sm"><Icons.Cloud /></button>
         </div>
       </div>
@@ -263,17 +253,29 @@ const App: React.FC = () => {
               </p>
             </header>
             <section className="space-y-4">
-              {habits.map((h, idx) => (
-                <HabitCard 
-                  key={h.id} habit={h} userTags={userTags} status={getHabitStatusForDate(h, selectedDate)} 
-                  onToggle={handleToggleHabit} onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} 
-                  onEdit={(h) => { setEditingHabit({...h}); setIsEditModalOpen(true); }}
-                  onLogPast={(h) => { setSelectedHabitForPastDate(h); setIsPastDateModalOpen(true); }}
-                  isReorderMode={isReorderMode} isFirst={idx === 0} isLast={idx === habits.length - 1}
-                  onMoveUp={() => { const n = [...habits]; [n[idx], n[idx-1]] = [n[idx-1], n[idx]]; setHabits(n); }}
-                  onMoveDown={() => { const n = [...habits]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; setHabits(n); }}
-                />
-              ))}
+              {habits.map((h, idx) => {
+                const now = new Date(); now.setHours(0,0,0,0);
+                const day = now.getDay();
+                const diff = now.getDate() - (day === 0 ? 6 : day - 1);
+                const monThisWeek = new Date(now.getFullYear(), now.getMonth(), diff);
+                const monLastWeek = new Date(monThisWeek.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const sunLastWeek = new Date(monThisWeek.getTime() - 24 * 60 * 60 * 1000);
+                const curWeek = calculateRateInRange(h, monThisWeek, now);
+                const prevWeek = calculateRateInRange(h, monLastWeek, sunLastWeek);
+
+                return (
+                  <HabitCard 
+                    key={h.id} habit={h} userTags={userTags} status={getHabitStatusForDate(h, selectedDate)} 
+                    onToggle={handleToggleHabit} onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} 
+                    onEdit={(h) => { setEditingHabit({...h}); setIsEditModalOpen(true); }}
+                    onLogPast={(h) => { setSelectedHabitForPastDate(h); setIsPastDateModalOpen(true); }}
+                    isReorderMode={isReorderMode} isFirst={idx === 0} isLast={idx === habits.length - 1}
+                    onMoveUp={() => { const n = [...habits]; [n[idx], n[idx-1]] = [n[idx-1], n[idx]]; setHabits(n); }}
+                    onMoveDown={() => { const n = [...habits]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; setHabits(n); }}
+                    curWeek={curWeek} prevWeek={prevWeek}
+                  />
+                );
+              })}
               {habits.length === 0 && <div className="text-center py-20 opacity-30 italic">Crea un hábito con el botón +</div>}
             </section>
           </div>
@@ -393,19 +395,18 @@ const App: React.FC = () => {
       {isSyncModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
           <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
-            <h3 className="text-3xl font-black mb-2 text-center">Configuración</h3>
-            <p className="text-[10px] text-center font-black uppercase opacity-40 mb-8">Google Sheets Connection</p>
+            <h3 className="text-3xl font-black mb-2 text-center">Exportar CSV</h3>
+            <p className="text-[10px] text-center font-black uppercase opacity-40 mb-8">Selecciona el rango de fechas</p>
             <div className="space-y-4">
-              <input value={syncUrl} onChange={e => setSyncUrl(e.target.value)} className="w-full px-5 py-4 rounded-2xl border bg-white font-bold text-xs" placeholder="URL del Script de Google" />
-              <button onClick={() => { localStorage.setItem(SYNC_URL_KEY, syncUrl); alert('URL Guardada Correctamente'); }} className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Guardar URL</button>
-              <div className="pt-4 border-t border-black/5">
-                <button onClick={() => {
-                  const data = JSON.stringify({ habits, userTags });
-                  const blob = new Blob([data], { type: 'application/json' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a'); a.href = url; a.download = `habit-backup-${todayStr}.json`; a.click();
-                }} className="w-full py-4 bg-white border-2 border-black/5 text-black rounded-2xl font-black uppercase text-[10px] shadow-sm">Exportar Backup JSON</button>
+              <div className="space-y-1">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-2">Desde</p>
+                <input type="date" value={exportStartDate} onChange={e => setExportStartDate(e.target.value)} className="w-full px-5 py-4 rounded-2xl border bg-white font-bold text-xs" />
               </div>
+              <div className="space-y-1">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-2">Hasta</p>
+                <input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="w-full px-5 py-4 rounded-2xl border bg-white font-bold text-xs" />
+              </div>
+              <button onClick={handleExportCSV} className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Exportar CSV</button>
               <button onClick={() => setIsSyncModalOpen(false)} className="w-full mt-4 py-4 font-black uppercase text-[10px] opacity-40 text-center">Cerrar</button>
             </div>
           </div>
@@ -448,7 +449,6 @@ const App: React.FC = () => {
             setHabits(prev => prev.map(h => {
               if (h.id === selectedHabitForPastDate.id) {
                 const nC = updateHabitCompletions(h, pastDateToLog, pastStatusToLog);
-                syncActionToCloud(h, pastDateToLog, pastStatusToLog);
                 return { ...h, completions: nC };
               }
               return h;

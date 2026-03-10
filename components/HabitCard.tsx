@@ -16,10 +16,12 @@ interface HabitCardProps {
   onMoveDown?: () => void;
   isFirst?: boolean;
   isLast?: boolean;
+  curWeek?: number;
+  prevWeek?: number;
 }
 
 const HabitCard: React.FC<HabitCardProps> = ({ 
-  habit, userTags, onToggle, onDelete, onLogPast, onEdit, status, isReorderMode, onMoveUp, onMoveDown, isFirst, isLast
+  habit, userTags, onToggle, onDelete, onLogPast, onEdit, status, isReorderMode, onMoveUp, onMoveDown, isFirst, isLast, curWeek, prevWeek
 }) => {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
@@ -91,6 +93,14 @@ const HabitCard: React.FC<HabitCardProps> = ({
           </button>
           <div className="flex-1 min-w-0">
             <h3 className={`font-bold text-orange-950 text-lg leading-tight transition-all break-words ${status === 'success' ? 'opacity-40' : ''}`}>{habit.name}</h3>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[10px] font-black uppercase opacity-40">Semana: {curWeek}%</span>
+              {prevWeek !== undefined && curWeek !== undefined && (
+                <span className={`text-[10px] font-black uppercase ${curWeek >= prevWeek ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  vs {prevWeek}%
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
