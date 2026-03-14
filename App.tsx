@@ -284,6 +284,23 @@ const App: React.FC = () => {
               <p className="text-[10px] font-black uppercase text-black/30 tracking-widest mt-1">Rendimiento Detallado</p>
             </header>
             <div className="space-y-6 pb-12">
+              <div className="bg-white border-2 border-black/5 rounded-[32px] p-6 shadow-sm">
+                <p className="text-[10px] font-black uppercase opacity-40 mb-4 text-center tracking-widest">Resumen Mensual</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col items-center text-center">
+                    <span className="text-3xl font-black text-emerald-600">
+                      {analysisData.filter(d => d.monthBetter).length}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase opacity-60 mt-1">hábitos mejorando</span>
+                  </div>
+                  <div className="flex flex-col items-center text-center">
+                    <span className="text-3xl font-black text-rose-600">
+                      {analysisData.filter(d => !d.monthBetter).length}
+                    </span>
+                    <span className="text-[10px] font-bold uppercase opacity-60 mt-1">hábitos empeorando</span>
+                  </div>
+                </div>
+              </div>
               {habits.map(habit => {
                 const tagData = userTags.find(t => t.name === habit.category);
                 const theme = getTagStyles(habit.category, tagData?.colorIndex);
