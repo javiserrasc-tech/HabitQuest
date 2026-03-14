@@ -182,7 +182,7 @@ const App: React.FC = () => {
     const firstThisYear = new Date(now.getFullYear(), 0, 1);
 
     return habits.map(h => {
-      const curWeek = calculateRateInRange(h, sunThisWeek, now);
+      const curWeek = calculateRateInRange(h, sunThisWeek, new Date());
       const prevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
       const curMonth = calculateRateInRange(h, firstThisMonth, now);
       const prevMonth = calculateRateInRange(h, firstLastMonth, lastLastMonth);
@@ -255,13 +255,11 @@ const App: React.FC = () => {
             <section className="space-y-4">
               {habits.map((h, idx) => {
                 const now = new Date(); now.setHours(0,0,0,0);
-                const day = now.getDay();
-                const diff = now.getDate() - (day === 0 ? 6 : day - 1);
-                const monThisWeek = new Date(now.getFullYear(), now.getMonth(), diff);
-                const monLastWeek = new Date(monThisWeek.getTime() - 7 * 24 * 60 * 60 * 1000);
-                const sunLastWeek = new Date(monThisWeek.getTime() - 24 * 60 * 60 * 1000);
-                const curWeek = calculateRateInRange(h, monThisWeek, now);
-                const prevWeek = calculateRateInRange(h, monLastWeek, sunLastWeek);
+                const sunThisWeek = getSundayOfDate(now);
+                const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
+                const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
+                const curWeek = calculateRateInRange(h, sunThisWeek, new Date());
+                const prevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
 
                 return (
                   <HabitCard 
