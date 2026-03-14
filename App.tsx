@@ -59,6 +59,7 @@ const App: React.FC = () => {
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [newReference, setNewReference] = useState<string>('');
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [csvFeedback, setCsvFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [analysisModalType, setAnalysisModalType] = useState<'improving' | 'worsening' | null>(null);
@@ -218,50 +219,57 @@ const App: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setCsvFeedback({ type: 'success', message: "CSV exportado correctamente" });
   };
 
   const handleImportCSV = () => {
     if (!importFile) {
-      alert("Por favor, selecciona un archivo CSV primero.");
+      setCsvFeedback({ type: 'error', message: "Por favor, selecciona un archivo CSV primero." });
       return;
     }
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      if (!text) return;
-      const lines = text.split('\n');
-      let importedCount = 0;
-      
-      setHabits(prevHabits => {
-        const newHabits = JSON.parse(JSON.stringify(prevHabits)) as Habit[];
-        // Skip header
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          
-          const parts = line.split(',');
-          if (parts.length < 4) continue;
-          
-          const fecha = parts[0];
-          const id_habito = parseInt(parts[1]);
-          const valor = parts[parts.length - 1];
-          
-          if (!fecha || isNaN(id_habito) || !valor) continue;
-          
-          const habitIndex = newHabits.findIndex(h => h.id === id_habito);
-          if (habitIndex === -1) continue;
-          
-          if (valor === '1' || valor === '0') {
-            const status = valor === '1' ? 'success' : 'failure';
-            newHabits[habitIndex].completions[fecha] = status;
-            importedCount++;
+      try {
+        const text = e.target?.result as string;
+        if (!text) throw new Error("El archivo está vacío o no se pudo leer.");
+        const lines = text.split('\n');
+        let importedCount = 0;
+        
+        setHabits(prevHabits => {
+          const newHabits = JSON.parse(JSON.stringify(prevHabits)) as Habit[];
+          // Skip header
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const parts = line.split(',');
+            if (parts.length < 4) continue;
+            
+            const fecha = parts[0];
+            const id_habito = parseInt(parts[1]);
+            const valor = parts[parts.length - 1];
+            
+            if (!fecha || isNaN(id_habito) || !valor) continue;
+            
+            const habitIndex = newHabits.findIndex(h => h.id === id_habito);
+            if (habitIndex === -1) continue;
+            
+            if (valor === '1' || valor === '0') {
+              const status = valor === '1' ? 'success' : 'failure';
+              newHabits[habitIndex].completions[fecha] = status;
+              importedCount++;
+            }
           }
-        }
-        alert(`Se importaron ${importedCount} registros correctamente.`);
-        return newHabits;
-      });
-      setIsSyncModalOpen(false);
-      setImportFile(null);
+          setCsvFeedback({ type: 'success', message: `${importedCount} registros importados correctamente.` });
+          return newHabits;
+        });
+        setImportFile(null);
+      } catch (err: any) {
+        setCsvFeedback({ type: 'error', message: err.message || "Error al importar el archivo." });
+      }
+    };
+    reader.onerror = () => {
+      setCsvFeedback({ type: 'error', message: "Error al leer el archivo." });
     };
     reader.readAsText(importFile);
   };
@@ -370,7 +378,7 @@ const App: React.FC = () => {
           <button onClick={() => setIsReorderMode(!isReorderMode)} className={`p-3 rounded-2xl border shadow-sm ${isReorderMode ? 'bg-orange-600 text-white' : 'bg-white/60 border-black/5 text-black/60'}`}><Icons.Move /></button>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setIsSyncModalOpen(true)} className="p-3 rounded-2xl border bg-white/60 border-black/5 text-black/60 shadow-sm"><Icons.Cloud /></button>
+          <button onClick={() => { setCsvFeedback(null); setIsSyncModalOpen(true); }} className="p-3 rounded-2xl border bg-white/60 border-black/5 text-black/60 shadow-sm"><Icons.Cloud /></button>
         </div>
       </div>
 
@@ -639,7 +647,7 @@ const App: React.FC = () => {
                 <div className="space-y-3">
                   <input 
                     type="file" 
-                    accept=".csv" 
+                    accept=".csv, text/csv, text/plain, application/csv, application/vnd.ms-excel" 
                     onChange={e => setImportFile(e.target.files?.[0] || null)}
                     className="w-full text-[10px] font-bold file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
                   />
@@ -651,6 +659,16 @@ const App: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {csvFeedback && (
+                <div className={`p-4 rounded-2xl border text-xs font-bold ${
+                  csvFeedback.type === 'success' 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                    : 'bg-rose-50 border-rose-200 text-rose-700'
+                }`}>
+                  {csvFeedback.message}
+                </div>
+              )}
 
               <button onClick={() => setIsSyncModalOpen(false)} className="w-full mt-4 py-4 font-black uppercase text-[10px] opacity-40 text-center">Cerrar</button>
             </div>
