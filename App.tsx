@@ -59,6 +59,7 @@ const App: React.FC = () => {
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
 
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
+  const [analysisModalType, setAnalysisModalType] = useState<'improving' | 'worsening' | null>(null);
 
   useEffect(() => {
     const newData = localStorage.getItem(STORAGE_KEY);
@@ -287,13 +288,19 @@ const App: React.FC = () => {
               <div className="bg-white border-2 border-black/5 rounded-[32px] p-6 shadow-sm">
                 <p className="text-[10px] font-black uppercase opacity-40 mb-4 text-center tracking-widest">Resumen Mensual</p>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col items-center text-center">
+                  <div 
+                    className="flex flex-col items-center text-center cursor-pointer active:scale-95 transition-transform"
+                    onClick={() => setAnalysisModalType('improving')}
+                  >
                     <span className="text-3xl font-black text-emerald-600">
                       {analysisData.filter(d => d.monthBetter).length}
                     </span>
                     <span className="text-[10px] font-bold uppercase opacity-60 mt-1">hábitos mejorando</span>
                   </div>
-                  <div className="flex flex-col items-center text-center">
+                  <div 
+                    className="flex flex-col items-center text-center cursor-pointer active:scale-95 transition-transform"
+                    onClick={() => setAnalysisModalType('worsening')}
+                  >
                     <span className="text-3xl font-black text-rose-600">
                       {analysisData.filter(d => !d.monthBetter).length}
                     </span>
@@ -311,8 +318,12 @@ const App: React.FC = () => {
                 // Generar los periodos de tiempo según frecuencia
                 const historyMarks = [];
                 if (habit.frequency === 'daily') {
-                  for (let i = 27; i >= 0; i--) {
-                    const d = new Date(); d.setDate(d.getDate() - i);
+                  const sunThisWeek = getSundayOfDate(new Date());
+                  const startDate = new Date(sunThisWeek);
+                  startDate.setDate(startDate.getDate() - 21);
+                  for (let i = 0; i < 28; i++) {
+                    const d = new Date(startDate);
+                    d.setDate(d.getDate() + i);
                     historyMarks.push(getLocalDateString(d));
                   }
                 } else if (habit.frequency === 'weekly') {
@@ -372,7 +383,7 @@ const App: React.FC = () => {
 
                         <div>
                           <p className="text-[9px] font-black uppercase opacity-30 mb-3 text-center">
-                            Historial ({habit.frequency === 'daily' ? 'Últimos 28 días' : habit.frequency === 'weekly' ? 'Últimas 12 semanas' : 'Últimos 12 meses'})
+                            Historial ({habit.frequency === 'daily' ? 'Últimas 4 semanas' : habit.frequency === 'weekly' ? 'Últimas 12 semanas' : 'Últimos 12 meses'})
                           </p>
                           <div className={`grid ${habit.frequency === 'daily' ? 'grid-cols-7' : 'grid-cols-6'} gap-1.5`}>
                             {historyMarks.map((m, i) => {
@@ -483,6 +494,33 @@ const App: React.FC = () => {
               <button type="button" onClick={() => setIsPastDateModalOpen(false)} className="w-full py-4 font-black uppercase text-[10px] opacity-40 text-center">Cancelar</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {analysisModalType && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0" onClick={() => setAnalysisModalType(null)}>
+          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-3xl font-black mb-2 text-center">
+              {analysisModalType === 'improving' ? 'Mejorando este mes' : 'Empeorando este mes'}
+            </h3>
+            <p className="text-[10px] text-center font-black uppercase opacity-40 mb-8">
+              Comparativa vs mes anterior
+            </p>
+            <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2 mb-8">
+              {habits
+                .map(h => ({ h, data: analysisData.find(d => d.id === h.id) }))
+                .filter(item => item.data && (analysisModalType === 'improving' ? item.data.monthBetter : !item.data.monthBetter))
+                .map(item => (
+                  <div key={item.h.id} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-black/5">
+                    <span className="font-bold text-sm">{item.h.name}</span>
+                    <span className="text-[10px] font-black opacity-40">
+                      ({item.data!.prevMonth}% → {item.data!.curMonth}%)
+                    </span>
+                  </div>
+                ))}
+            </div>
+            <button onClick={() => setAnalysisModalType(null)} className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Cerrar</button>
+          </div>
         </div>
       )}
 
