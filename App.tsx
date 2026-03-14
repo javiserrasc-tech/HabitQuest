@@ -60,6 +60,7 @@ const App: React.FC = () => {
   const [newReference, setNewReference] = useState<string>('');
   const [importFile, setImportFile] = useState<File | null>(null);
   const [csvFeedback, setCsvFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [panelFeedback, setPanelFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [analysisModalType, setAnalysisModalType] = useState<'improving' | 'worsening' | null>(null);
@@ -275,83 +276,101 @@ const App: React.FC = () => {
   };
 
   const handleExportPanelCSV = () => {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    let csvContent = "id,nombre,referencia,total,pct_90d,pct_30d,sem_anterior,sem_actual\n";
-    
-    habits.forEach(h => {
-      const now = new Date(); now.setHours(0,0,0,0);
-      const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
-      const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
-      const sunThisWeek = getSundayOfDate(now);
-      const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
-      const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
-
-      const completions = Object.keys(h.completions).sort();
-      const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
+    setPanelFeedback(null);
+    try {
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      let csvContent = "id,nombre,referencia,total,pct_90d,pct_30d,sem_anterior,sem_actual\n";
       
-      const totalRate = calculateRateInRange(h, startDate, now);
-      const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
-      const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
-      const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
-      const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
+      habits.forEach(h => {
+        const now = new Date(); now.setHours(0,0,0,0);
+        const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
+        const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
+        const sunThisWeek = getSundayOfDate(now);
+        const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
+        const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
 
-      const ref = h.reference !== undefined ? h.reference : '';
-      csvContent += `${h.id},"${h.name}",${ref},${totalRate},${rate90d},${rate30d},${ratePrevWeek},${rateCurWeek}\n`;
-    });
+        const completions = Object.keys(h.completions).sort();
+        const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
+        
+        const totalRate = calculateRateInRange(h, startDate, now);
+        const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
+        const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
+        const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
+        const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `panel-${dateStr}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+        const ref = h.reference !== undefined ? h.reference : '';
+        csvContent += `${h.id},"${h.name}",${ref},${totalRate},${rate90d},${rate30d},${ratePrevWeek},${rateCurWeek}\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `panel-${dateStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setPanelFeedback({ type: 'success', message: "CSV exportado correctamente" });
+    } catch (error: any) {
+      setPanelFeedback({ type: 'error', message: error.message || "Error al exportar CSV" });
+    }
   };
 
   const handleExportPanelImage = () => {
+    setPanelFeedback(null);
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const element = document.getElementById('panel-table-container');
-    if (!element) return;
+    if (!element) {
+      setPanelFeedback({ type: 'error', message: "No se encontró el contenedor de la tabla" });
+      return;
+    }
 
     const runCapture = () => {
-      const originalHeight = element.style.height;
-      const originalOverflow = element.style.overflow;
-      const originalMaxHeight = element.style.maxHeight;
+      try {
+        const originalHeight = element.style.height;
+        const originalOverflow = element.style.overflow;
+        const originalMaxHeight = element.style.maxHeight;
 
-      element.style.height = 'auto';
-      element.style.overflow = 'visible';
-      element.style.maxHeight = 'none';
+        element.style.height = 'auto';
+        element.style.overflow = 'visible';
+        element.style.maxHeight = 'none';
 
-      (window as any).html2canvas(element, {
-        backgroundColor: '#fffcf0',
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
-        width: element.scrollWidth,
-        height: element.scrollHeight,
-        useCORS: true,
-        scale: 2,
-        logging: false
-      }).then((canvas: HTMLCanvasElement) => {
-        element.style.height = originalHeight;
-        element.style.overflow = originalOverflow;
-        element.style.maxHeight = originalMaxHeight;
+        (window as any).html2canvas(element, {
+          backgroundColor: '#fffcf0',
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: element.scrollWidth,
+          windowHeight: element.scrollHeight,
+          width: element.scrollWidth,
+          height: element.scrollHeight,
+          useCORS: true,
+          scale: 2,
+          logging: false
+        }).then((canvas: HTMLCanvasElement) => {
+          element.style.height = originalHeight;
+          element.style.overflow = originalOverflow;
+          element.style.maxHeight = originalMaxHeight;
 
-        const link = document.createElement('a');
-        link.download = `panel-report-${dateStr}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-      });
+          const link = document.createElement('a');
+          link.download = `panel-report-${dateStr}.png`;
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+          setPanelFeedback({ type: 'success', message: "Imagen exportada correctamente" });
+        }).catch((err: any) => {
+          setPanelFeedback({ type: 'error', message: err.message || "Error al generar la imagen" });
+        });
+      } catch (err: any) {
+        setPanelFeedback({ type: 'error', message: err.message || "Error al capturar la imagen" });
+      }
     };
 
     if (!(window as any).html2canvas) {
       const script = document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
       script.onload = runCapture;
+      script.onerror = () => setPanelFeedback({ type: 'error', message: "Error al cargar la librería de captura" });
       document.head.appendChild(script);
     } else {
       runCapture();
@@ -559,6 +578,15 @@ const App: React.FC = () => {
               <button onClick={handleExportPanelCSV} className="px-3 py-2 rounded-xl border bg-white border-black/5 text-[9px] font-black uppercase shadow-sm active:scale-95 transition-transform">CSV Panel</button>
               <button onClick={handleExportPanelImage} className="px-3 py-2 rounded-xl border bg-white border-black/5 text-[9px] font-black uppercase shadow-sm active:scale-95 transition-transform">Imagen</button>
             </div>
+            {panelFeedback && (
+              <div className={`mb-4 p-4 rounded-2xl border text-xs font-bold ${
+                panelFeedback.type === 'success' 
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                  : 'bg-rose-50 border-rose-200 text-rose-700'
+              }`}>
+                {panelFeedback.message}
+              </div>
+            )}
             <div id="panel-table-container" className="overflow-x-auto pb-12">
               <table className="w-full text-left border-separate border-spacing-y-2">
                 <thead>
