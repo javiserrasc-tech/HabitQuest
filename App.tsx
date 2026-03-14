@@ -219,6 +219,72 @@ const App: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const handleExportPanelCSV = () => {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    let csvContent = "nombre,referencia,total,pct_90d,pct_30d,sem_anterior,sem_actual\n";
+    
+    habits.forEach(h => {
+      const now = new Date(); now.setHours(0,0,0,0);
+      const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
+      const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
+      const sunThisWeek = getSundayOfDate(now);
+      const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
+      const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
+
+      const completions = Object.keys(h.completions).sort();
+      const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
+      
+      const totalRate = calculateRateInRange(h, startDate, now);
+      const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
+      const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
+      const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
+      const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
+
+      const ref = h.reference !== undefined ? h.reference : '';
+      csvContent += `"${h.name}",${ref},${totalRate},${rate90d},${rate30d},${ratePrevWeek},${rateCurWeek}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `panel-${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportPanelImage = () => {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const element = document.getElementById('panel-table-container');
+    if (!element) return;
+
+    const runCapture = () => {
+      (window as any).html2canvas(element, {
+        backgroundColor: '#fffcf0',
+        scale: 2,
+        logging: false,
+        useCORS: true
+      }).then((canvas: HTMLCanvasElement) => {
+        const link = document.createElement('a');
+        link.download = `panel-report-${dateStr}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      });
+    };
+
+    if (!(window as any).html2canvas) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      script.onload = runCapture;
+      document.head.appendChild(script);
+    } else {
+      runCapture();
+    }
+  };
+
   const handleAddHabit = (e: React.FormEvent) => {
     e.preventDefault();
     const idNum = parseInt(newId);
@@ -416,7 +482,11 @@ const App: React.FC = () => {
               <h1 className="text-3xl font-black tracking-tight">Panel</h1>
               <p className="text-[10px] font-black uppercase text-black/30 tracking-widest mt-1">Vista de Tabla</p>
             </header>
-            <div className="overflow-x-auto pb-12">
+            <div className="flex justify-end gap-2 mb-4">
+              <button onClick={handleExportPanelCSV} className="px-3 py-2 rounded-xl border bg-white border-black/5 text-[9px] font-black uppercase shadow-sm active:scale-95 transition-transform">CSV Panel</button>
+              <button onClick={handleExportPanelImage} className="px-3 py-2 rounded-xl border bg-white border-black/5 text-[9px] font-black uppercase shadow-sm active:scale-95 transition-transform">Imagen</button>
+            </div>
+            <div id="panel-table-container" className="overflow-x-auto pb-12">
               <table className="w-full text-left border-separate border-spacing-y-2">
                 <thead>
                   <tr className="text-[9px] font-black uppercase opacity-40">
@@ -452,9 +522,12 @@ const App: React.FC = () => {
                       return val >= ref ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
                     };
 
+                    const tagData = userTags.find(t => t.name === h.category);
+                    const theme = getTagStyles(h.category, tagData?.colorIndex);
+
                     return (
                       <tr key={h.id} className="bg-white border-2 border-black/5 rounded-2xl shadow-sm overflow-hidden">
-                        <td className="px-4 py-4 font-bold text-sm border-y-2 border-l-2 border-black/5 rounded-l-2xl">{h.name}</td>
+                        <td className={`px-4 py-4 font-bold text-sm border-y-2 border-l-2 border-black/5 rounded-l-2xl ${theme.tag}`}>{h.name}</td>
                         <td className="px-4 py-4 text-center font-black text-xs border-y-2 border-black/5 opacity-40">{h.reference !== undefined ? `${h.reference}%` : '—'}</td>
                         <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(totalRate, h.reference)}`}>{totalRate}%</td>
                         <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rate90d, totalRate)}`}>{rate90d}%</td>
