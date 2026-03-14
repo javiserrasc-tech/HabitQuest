@@ -19,4 +19,5 @@ export interface Habit {
   completions: Record<string, 'success' | 'failure'>; 
   createdAt: string;
   streak: number;
+  reference?: number;
 }

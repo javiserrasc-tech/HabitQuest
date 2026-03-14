@@ -8,7 +8,7 @@ const STORAGE_KEY = 'habitquest_data_v5';
 const TAGS_KEY = 'habitquest_tags_v4';
 const DEFAULT_TAG: UserTag = { name: 'General', colorIndex: 0 };
 
-type View = 'habits' | 'analysis';
+type View = 'habits' | 'analysis' | 'panel';
 type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
 const getLocalDateString = (date: Date = new Date()) => {
@@ -57,6 +57,7 @@ const App: React.FC = () => {
   const [newType, setNewType] = useState<'positive' | 'negative'>('positive');
   const [selectedTagName, setSelectedTagName] = useState(DEFAULT_TAG.name);
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [newReference, setNewReference] = useState<string>('');
 
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [analysisModalType, setAnalysisModalType] = useState<'improving' | 'worsening' | null>(null);
@@ -222,11 +223,12 @@ const App: React.FC = () => {
     e.preventDefault();
     const idNum = parseInt(newId);
     if (!newName.trim() || isNaN(idNum) || isIdTaken(idNum)) return;
+    const refNum = newReference ? parseInt(newReference) : undefined;
     const newHabit: Habit = {
-      id: idNum, name: newName, description: '', category: selectedTagName, type: newType, frequency: newFreq, color: '', completions: {}, createdAt: new Date().toISOString(), streak: 0
+      id: idNum, name: newName, description: '', category: selectedTagName, type: newType, frequency: newFreq, color: '', completions: {}, createdAt: new Date().toISOString(), streak: 0, reference: refNum
     };
     setHabits(prev => [...prev, newHabit]);
-    setNewName(''); setIsModalOpen(false);
+    setNewName(''); setNewReference(''); setIsModalOpen(false);
   };
 
   return (
@@ -278,7 +280,7 @@ const App: React.FC = () => {
               {habits.length === 0 && <div className="text-center py-20 opacity-30 italic">Crea un hábito con el botón +</div>}
             </section>
           </div>
-        ) : (
+        ) : currentView === 'analysis' ? (
           <div className="px-6 animate-in slide-in-from-right duration-500 mt-4">
             <header className="mb-8">
               <h1 className="text-3xl font-black tracking-tight">Análisis</h1>
@@ -408,13 +410,73 @@ const App: React.FC = () => {
               })}
             </div>
           </div>
-        )}
-      </div>
+        ) : (
+          <div className="px-6 animate-in slide-in-from-right duration-500 mt-4">
+            <header className="mb-8">
+              <h1 className="text-3xl font-black tracking-tight">Panel</h1>
+              <p className="text-[10px] font-black uppercase text-black/30 tracking-widest mt-1">Vista de Tabla</p>
+            </header>
+            <div className="overflow-x-auto pb-12">
+              <table className="w-full text-left border-separate border-spacing-y-2">
+                <thead>
+                  <tr className="text-[9px] font-black uppercase opacity-40">
+                    <th className="px-4 py-2">Hábito</th>
+                    <th className="px-4 py-2 text-center">Ref.</th>
+                    <th className="px-4 py-2 text-center">Total</th>
+                    <th className="px-4 py-2 text-center">% 90d</th>
+                    <th className="px-4 py-2 text-center">% 30d</th>
+                    <th className="px-4 py-2 text-center">Sem-1</th>
+                    <th className="px-4 py-2 text-center">% Sem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {habits.map(h => {
+                    const now = new Date(); now.setHours(0,0,0,0);
+                    const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
+                    const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
+                    const sunThisWeek = getSundayOfDate(now);
+                    const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
+                    const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
+
+                    const completions = Object.keys(h.completions).sort();
+                    const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
+                    
+                    const totalRate = calculateRateInRange(h, startDate, now);
+                    const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
+                    const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
+                    const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
+                    const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
+
+                    const getCellStyles = (val: number, ref: number | undefined) => {
+                      if (ref === undefined) return "bg-gray-50 text-gray-500";
+                      return val >= ref ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+                    };
+
+                    return (
+                      <tr key={h.id} className="bg-white border-2 border-black/5 rounded-2xl shadow-sm overflow-hidden">
+                        <td className="px-4 py-4 font-bold text-sm border-y-2 border-l-2 border-black/5 rounded-l-2xl">{h.name}</td>
+                        <td className="px-4 py-4 text-center font-black text-xs border-y-2 border-black/5 opacity-40">{h.reference !== undefined ? `${h.reference}%` : '—'}</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(totalRate, h.reference)}`}>{totalRate}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rate90d, totalRate)}`}>{rate90d}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rate30d, rate90d)}`}>{rate30d}%</td>
+                        <td className="px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 bg-gray-50/50 opacity-40">{ratePrevWeek}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-r-2 border-black/5 rounded-r-2xl ${getCellStyles(rateCurWeek, ratePrevWeek)}`}>{rateCurWeek}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      }
+    </div>
 
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto backdrop-blur-xl border-t px-12 py-5 flex justify-between items-center z-40 rounded-t-[32px] shadow-2xl bg-white/80 border-black/5">
+        <button onClick={() => { setNewId(String(getFirstAvailableId())); setNewReference(''); setIsModalOpen(true); }} className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl bg-orange-700 text-white -mt-10 border-4 border-white active:scale-90 transition-transform"><Icons.Plus /></button>
         <button onClick={() => setCurrentView('habits')} className={`flex flex-col items-center gap-1.5 ${currentView === 'habits' ? 'text-orange-700' : 'opacity-30'}`}><Icons.Target /><span className="text-[9px] font-black uppercase">Hábitos</span></button>
-        <button onClick={() => { setNewId(String(getFirstAvailableId())); setIsModalOpen(true); }} className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl bg-orange-700 text-white -mt-10 border-4 border-white active:scale-90 transition-transform"><Icons.Plus /></button>
-        <button onClick={() => { setCurrentView('analysis'); setExpandedHabitId(null); }} className={`flex flex-col items-center gap-1.5 ${currentView === 'analysis' ? 'text-orange-700' : 'opacity-30'}`}><Icons.Chart /><span className="text-[9px] font-black uppercase">Análisis</span></button>
+        <button onClick={() => setCurrentView('analysis')} className={`flex flex-col items-center gap-1.5 ${currentView === 'analysis' ? 'text-orange-700' : 'opacity-30'}`}><Icons.Chart /><span className="text-[9px] font-black uppercase">Análisis</span></button>
+        <button onClick={() => setCurrentView('panel')} className={`flex flex-col items-center gap-1.5 ${currentView === 'panel' ? 'text-orange-700' : 'opacity-30'}`}><Icons.Table /><span className="text-[9px] font-black uppercase">Panel</span></button>
       </nav>
 
       {/* Modales - Se mantienen igual para no perder funcionalidad */}
@@ -446,6 +508,7 @@ const App: React.FC = () => {
             <div className="space-y-5">
               <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">ID Sheet (Manual)</p><input required type="number" value={newId} onChange={e => setNewId(e.target.value)} className={`w-full px-6 py-4 rounded-2xl border font-bold ${isIdTaken(parseInt(newId)) ? 'border-rose-500 bg-rose-50' : 'bg-white border-black/5'}`} placeholder="ID..." />{isIdTaken(parseInt(newId)) && <p className="text-[9px] text-rose-500 font-bold ml-2">Este ID ya está en uso</p>}</div>
               <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Nombre</p><input required value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" placeholder="Hábito..." /></div>
+              <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Referencia % (Opcional)</p><input type="number" min="0" max="100" value={newReference} onChange={e => setNewReference(e.target.value)} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold" placeholder="0-100..." /></div>
               <div className="grid grid-cols-3 gap-2">{['daily', 'weekly', 'monthly'].map(f => (<button key={f} type="button" onClick={() => setNewFreq(f as any)} className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 ${newFreq === f ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5'}`}>{f}</button>))}</div>
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-2">Categoría</p>
@@ -530,7 +593,8 @@ const App: React.FC = () => {
             <h3 className="text-3xl font-black mb-8 text-center">Editar Hábito</h3>
             <div className="space-y-5">
               <div className="space-y-2 opacity-50"><p className="text-[10px] font-black uppercase ml-2">ID Sheet (No editable)</p><div className="w-full px-6 py-4 rounded-2xl border bg-gray-100 font-bold text-sm">{editingHabit.id}</div></div>
-              <input required value={editingHabit.name} onChange={e => setEditingHabit({...editingHabit, name: e.target.value})} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" />
+              <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Nombre</p><input required value={editingHabit.name} onChange={e => setEditingHabit({...editingHabit, name: e.target.value})} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" /></div>
+              <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Referencia % (Opcional)</p><input type="number" min="0" max="100" value={editingHabit.reference || ''} onChange={e => setEditingHabit({...editingHabit, reference: e.target.value ? parseInt(e.target.value) : undefined})} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold" placeholder="0-100..." /></div>
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-2">Categoría</p>
                 <div className="flex flex-wrap gap-2">
