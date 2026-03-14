@@ -58,6 +58,7 @@ const App: React.FC = () => {
   const [selectedTagName, setSelectedTagName] = useState(DEFAULT_TAG.name);
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [newReference, setNewReference] = useState<string>('');
+  const [importFile, setImportFile] = useState<File | null>(null);
 
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [analysisModalType, setAnalysisModalType] = useState<'improving' | 'worsening' | null>(null);
@@ -217,6 +218,52 @@ const App: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleImportCSV = () => {
+    if (!importFile) {
+      alert("Por favor, selecciona un archivo CSV primero.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (!text) return;
+      const lines = text.split('\n');
+      let importedCount = 0;
+      
+      setHabits(prevHabits => {
+        const newHabits = JSON.parse(JSON.stringify(prevHabits)) as Habit[];
+        // Skip header
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          const parts = line.split(',');
+          if (parts.length < 4) continue;
+          
+          const fecha = parts[0];
+          const id_habito = parseInt(parts[1]);
+          const valor = parts[parts.length - 1];
+          
+          if (!fecha || isNaN(id_habito) || !valor) continue;
+          
+          const habitIndex = newHabits.findIndex(h => h.id === id_habito);
+          if (habitIndex === -1) continue;
+          
+          if (valor === '1' || valor === '0') {
+            const status = valor === '1' ? 'success' : 'failure';
+            newHabits[habitIndex].completions[fecha] = status;
+            importedCount++;
+          }
+        }
+        alert(`Se importaron ${importedCount} registros correctamente.`);
+        return newHabits;
+      });
+      setIsSyncModalOpen(false);
+      setImportFile(null);
+    };
+    reader.readAsText(importFile);
   };
 
   const handleExportPanelCSV = () => {
@@ -586,6 +633,25 @@ const App: React.FC = () => {
                 <input type="date" value={exportEndDate} onChange={e => setExportEndDate(e.target.value)} className="w-full px-5 py-4 rounded-2xl border bg-white font-bold text-xs" />
               </div>
               <button onClick={handleExportCSV} className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase text-[10px] shadow-lg">Exportar CSV</button>
+              
+              <div className="pt-8 mt-4 border-t border-black/5 space-y-4">
+                <p className="text-[10px] text-center font-black uppercase opacity-40">Importar datos</p>
+                <div className="space-y-3">
+                  <input 
+                    type="file" 
+                    accept=".csv" 
+                    onChange={e => setImportFile(e.target.files?.[0] || null)}
+                    className="w-full text-[10px] font-bold file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                  />
+                  <button 
+                    onClick={handleImportCSV}
+                    className="w-full py-4 rounded-2xl border bg-white border-black/5 text-[10px] font-black uppercase shadow-sm active:scale-95 transition-transform"
+                  >
+                    Importar CSV
+                  </button>
+                </div>
+              </div>
+
               <button onClick={() => setIsSyncModalOpen(false)} className="w-full mt-4 py-4 font-black uppercase text-[10px] opacity-40 text-center">Cerrar</button>
             </div>
           </div>
