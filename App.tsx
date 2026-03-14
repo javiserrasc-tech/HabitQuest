@@ -222,7 +222,7 @@ const App: React.FC = () => {
   const handleExportPanelCSV = () => {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
-    let csvContent = "nombre,referencia,total,pct_90d,pct_30d,sem_anterior,sem_actual\n";
+    let csvContent = "id,nombre,referencia,total,pct_90d,pct_30d,sem_anterior,sem_actual\n";
     
     habits.forEach(h => {
       const now = new Date(); now.setHours(0,0,0,0);
@@ -242,7 +242,7 @@ const App: React.FC = () => {
       const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
 
       const ref = h.reference !== undefined ? h.reference : '';
-      csvContent += `"${h.name}",${ref},${totalRate},${rate90d},${rate30d},${ratePrevWeek},${rateCurWeek}\n`;
+      csvContent += `${h.id},"${h.name}",${ref},${totalRate},${rate90d},${rate30d},${ratePrevWeek},${rateCurWeek}\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -262,12 +262,30 @@ const App: React.FC = () => {
     if (!element) return;
 
     const runCapture = () => {
+      const originalHeight = element.style.height;
+      const originalOverflow = element.style.overflow;
+      const originalMaxHeight = element.style.maxHeight;
+
+      element.style.height = 'auto';
+      element.style.overflow = 'visible';
+      element.style.maxHeight = 'none';
+
       (window as any).html2canvas(element, {
         backgroundColor: '#fffcf0',
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+        width: element.scrollWidth,
+        height: element.scrollHeight,
+        useCORS: true,
         scale: 2,
-        logging: false,
-        useCORS: true
+        logging: false
       }).then((canvas: HTMLCanvasElement) => {
+        element.style.height = originalHeight;
+        element.style.overflow = originalOverflow;
+        element.style.maxHeight = originalMaxHeight;
+
         const link = document.createElement('a');
         link.download = `panel-report-${dateStr}.png`;
         link.href = canvas.toDataURL('image/png');
