@@ -40,14 +40,36 @@ const App: React.FC = () => {
   const [isReorderMode, setIsReorderMode] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [isLandscape, setIsLandscape] = useState(
-    () => window.matchMedia('(orientation: landscape)').matches
+    () => window.innerWidth > window.innerHeight
   );
 
   useEffect(() => {
+    const update = () => setIsLandscape(window.innerWidth > window.innerHeight);
+    
     const mq = window.matchMedia('(orientation: landscape)');
-    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    
+    // Compatibilidad con Android Chrome antiguo
+    if (mq.addEventListener) {
+      mq.addEventListener('change', update);
+    } else {
+      (mq as any).addListener(update);
+    }
+    
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(update, 100);
+      setTimeout(update, 300);
+      setTimeout(update, 500);
+    });
+
+    return () => {
+      if (mq.removeEventListener) {
+        mq.removeEventListener('change', update);
+      } else {
+        (mq as any).removeListener(update);
+      }
+      window.removeEventListener('resize', update);
+    };
   }, []);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
