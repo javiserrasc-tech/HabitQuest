@@ -119,7 +119,12 @@ const App: React.FC = () => {
   };
 
   const handleArchiveHabit = (id: number) => {
-    setHabits(prev => prev.map(h => h.id === id ? { ...h, archived: !h.archived } : h));
+    const habit = habits.find(h => h.id === id);
+    if (!habit) return;
+    const message = habit.archived ? "¿Desarchivar este hábito?" : "¿Archivar este hábito?";
+    if (window.confirm(message)) {
+      setHabits(prev => prev.map(h => h.id === id ? { ...h, archived: !h.archived } : h));
+    }
   };
 
   const getFirstAvailableId = () => {
