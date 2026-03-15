@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'habitquest-v1';
+const CACHE_NAME = 'habitquest-v3';
 const ASSETS = [
   '/',
   '/index.html',
