@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Habit, UserTag, HabitStatus } from './types';
-import { Icons, getTagStyles } from './constants';
+import { Icons, getTagStyles, COLOR_PALETTE } from './constants';
 import HabitCard from './components/HabitCard';
 
 const STORAGE_KEY = 'habitquest_data_v5';
@@ -44,6 +44,8 @@ const App: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  const [newTagColorIndex, setNewTagColorIndex] = useState(0);
+  const [expandedTagName, setExpandedTagName] = useState<string | null>(null);
   const [isPastDateModalOpen, setIsPastDateModalOpen] = useState(false);
   
   const [exportStartDate, setExportStartDate] = useState(todayStr);
@@ -60,6 +62,7 @@ const App: React.FC = () => {
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [newReference, setNewReference] = useState<string>('');
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [configImportFile, setConfigImportFile] = useState<File | null>(null);
   const [csvFeedback, setCsvFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [panelFeedback, setPanelFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
@@ -283,6 +286,58 @@ const App: React.FC = () => {
       setCsvFeedback({ type: 'error', message: "Error al leer el archivo." });
     };
     reader.readAsText(importFile);
+  };
+
+  const handleExportConfig = () => {
+    try {
+      const config = { habits, userTags };
+      const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `habitquest-config-${dateStr}.json`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setCsvFeedback({ type: 'success', message: "Configuración exportada correctamente" });
+    } catch (error: any) {
+      setCsvFeedback({ type: 'error', message: error.message || "Error al exportar configuración" });
+    }
+  };
+
+  const handleImportConfig = () => {
+    if (!configImportFile) {
+      setCsvFeedback({ type: 'error', message: "Por favor, selecciona un archivo JSON primero." });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        if (!text) throw new Error("El archivo está vacío o no se pudo leer.");
+        const parsed = JSON.parse(text);
+        
+        if (!parsed.habits || !parsed.userTags) {
+          throw new Error("El archivo no tiene el formato correcto (faltan habits o userTags).");
+        }
+        
+        setHabits(parsed.habits);
+        setUserTags(parsed.userTags);
+        setCsvFeedback({ 
+          type: 'success', 
+          message: `Configuración importada correctamente. ${parsed.habits.length} hábitos cargados.` 
+        });
+        setConfigImportFile(null);
+      } catch (err: any) {
+        setCsvFeedback({ type: 'error', message: err.message || "Error al importar la configuración." });
+      }
+    };
+    reader.onerror = () => {
+      setCsvFeedback({ type: 'error', message: "Error al leer el archivo." });
+    };
+    reader.readAsText(configImportFile);
   };
 
   const handleExportPanelCSV = () => {
@@ -708,6 +763,34 @@ const App: React.FC = () => {
                 </div>
               </div>
 
+              <div className="pt-8 mt-4 border-t border-black/5 space-y-4">
+                <p className="text-[10px] text-center font-black uppercase opacity-40">Configuración</p>
+                <div className="space-y-3">
+                  <button 
+                    onClick={handleExportConfig}
+                    className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase text-[10px] shadow-lg"
+                  >
+                    Exportar Configuración
+                  </button>
+                  
+                  <div className="pt-4 space-y-3">
+                    <p className="text-[10px] text-center font-black uppercase opacity-40">Importar Configuración</p>
+                    <input 
+                      type="file" 
+                      accept=".json, application/json" 
+                      onChange={e => setConfigImportFile(e.target.files?.[0] || null)}
+                      className="w-full text-[10px] font-bold file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[10px] file:font-black file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                    />
+                    <button 
+                      onClick={handleImportConfig}
+                      className="w-full py-4 rounded-2xl border bg-white border-black/5 text-[10px] font-black uppercase shadow-sm active:scale-95 transition-transform"
+                    >
+                      Importar Config
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {csvFeedback && (
                 <div className={`p-4 rounded-2xl border text-xs font-bold ${
                   csvFeedback.type === 'success' 
@@ -844,44 +927,104 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
           <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
             <h3 className="text-3xl font-black mb-8 text-center">Categorías</h3>
-            <div className="mb-6 flex gap-2">
-              <input
-                id="new-tag-input"
-                className="flex-1 px-4 py-3 rounded-xl border bg-white font-bold text-xs"
-                placeholder="Nueva categoría..."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    const val = (e.target as HTMLInputElement).value.trim();
-                    if (val && !userTags.some(t => t.name === val)) {
-                      setUserTags([...userTags, { name: val, colorIndex: userTags.length % 10 }]);
-                      (e.target as HTMLInputElement).value = '';
+            
+            {/* Crear etiqueta nueva */}
+            <div className="mb-8 space-y-4">
+              <div className="flex gap-2">
+                <input
+                  id="new-tag-input"
+                  className="flex-1 px-4 py-3 rounded-xl border bg-white font-bold text-xs"
+                  placeholder="Nueva categoría..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      if (val && !userTags.some(t => t.name === val)) {
+                        setUserTags([...userTags, { name: val, colorIndex: newTagColorIndex }]);
+                        (e.target as HTMLInputElement).value = '';
+                        setNewTagColorIndex(0);
+                      }
                     }
-                  }
-                }}
-              />
-              <button
-                onClick={() => {
-                  const input = document.getElementById('new-tag-input') as HTMLInputElement;
-                  const val = input.value.trim();
-                  if (val && !userTags.some(t => t.name === val)) {
-                    setUserTags([...userTags, { name: val, colorIndex: userTags.length % 10 }]);
-                    input.value = '';
-                  }
-                }}
-                className="px-4 py-3 bg-orange-700 text-white rounded-xl font-black text-[10px] uppercase"
-              >
-                Añadir
-              </button>
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const input = document.getElementById('new-tag-input') as HTMLInputElement;
+                    const val = input.value.trim();
+                    if (val && !userTags.some(t => t.name === val)) {
+                      setUserTags([...userTags, { name: val, colorIndex: newTagColorIndex }]);
+                      input.value = '';
+                      setNewTagColorIndex(0);
+                    }
+                  }}
+                  className="px-4 py-3 bg-orange-700 text-white rounded-xl font-black text-[10px] uppercase"
+                >
+                  Añadir
+                </button>
+              </div>
+              <div className="flex gap-3 justify-center">
+                {COLOR_PALETTE.map((color, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setNewTagColorIndex(idx)}
+                    className={`w-7 h-7 rounded-full ${color.bg} transition-all ${newTagColorIndex === idx ? 'ring-2 ring-offset-1 ring-black/40 scale-110' : 'opacity-60 hover:opacity-100'}`}
+                  />
+                ))}
+              </div>
             </div>
-            <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
+
+            {/* Lista de etiquetas existentes */}
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
               {userTags.map(t => (
-                <div key={t.name} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-black/5">
-                  <span className="font-bold text-sm">{t.name}</span>
-                  {t.name !== DEFAULT_TAG.name && <button onClick={() => setUserTags(p => p.filter(x => x.name !== t.name))} className="text-rose-500"><Icons.Trash /></button>}
+                <div key={t.name} className="space-y-2">
+                  <div 
+                    onClick={() => setExpandedTagName(expandedTagName === t.name ? null : t.name)}
+                    className="flex items-center justify-between p-4 bg-white rounded-2xl border border-black/5 cursor-pointer hover:bg-orange-50/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-full ${COLOR_PALETTE[t.colorIndex].bg}`} />
+                      <span className="font-bold text-sm">{t.name}</span>
+                    </div>
+                    {t.name !== DEFAULT_TAG.name && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHabits(prev => prev.map(h => h.category === t.name ? { ...h, category: DEFAULT_TAG.name } : h));
+                          setUserTags(p => p.filter(x => x.name !== t.name));
+                        }} 
+                        className="text-rose-500 p-2 hover:bg-rose-50 rounded-full transition-colors"
+                      >
+                        <Icons.Trash />
+                      </button>
+                    )}
+                  </div>
+                  
+                  {expandedTagName === t.name && (
+                    <div className="flex gap-3 justify-center py-3 bg-white/40 rounded-2xl animate-in fade-in zoom-in duration-200">
+                      {COLOR_PALETTE.map((color, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setUserTags(prev => prev.map(tag => tag.name === t.name ? { ...tag, colorIndex: idx } : tag));
+                            setExpandedTagName(null);
+                          }}
+                          className={`w-7 h-7 rounded-full ${color.bg} transition-all ${t.colorIndex === idx ? 'ring-2 ring-offset-1 ring-black/40 scale-110' : 'opacity-60 hover:opacity-100'}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
-            <button onClick={() => setIsTagManagerOpen(false)} className="w-full mt-8 py-4 font-black uppercase text-[10px] opacity-40 text-center">Cerrar</button>
+            
+            <button 
+              onClick={() => {
+                setIsTagManagerOpen(false);
+                setExpandedTagName(null);
+              }} 
+              className="w-full mt-8 py-4 font-black uppercase text-[10px] opacity-40 text-center"
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       )}

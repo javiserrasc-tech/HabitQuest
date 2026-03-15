@@ -2,40 +2,47 @@
 import React from 'react';
 
 export const COLOR_PALETTE = [
-  { // Soft Amber
+  { // Gris
     id: 0,
-    tag: 'bg-amber-100 text-amber-800 border-amber-200',
-    card: 'bg-amber-50/50 border-amber-100',
-    accent: 'text-amber-600',
-    bg: 'bg-amber-300'
+    tag: 'bg-gray-100 text-gray-800 border-gray-200',
+    card: 'bg-gray-50/50 border-gray-100',
+    accent: 'text-gray-600',
+    bg: 'bg-gray-400'
   },
-  { // Sky Blue
+  { // Azul
     id: 1,
     tag: 'bg-blue-100 text-blue-800 border-blue-200',
     card: 'bg-blue-50/50 border-blue-100',
     accent: 'text-blue-600',
-    bg: 'bg-blue-300'
+    bg: 'bg-blue-400'
   },
-  { // Sage Green
+  { // Verde
     id: 2,
-    tag: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    card: 'bg-emerald-50/50 border-emerald-100',
-    accent: 'text-emerald-600',
-    bg: 'bg-emerald-300'
+    tag: 'bg-green-100 text-green-800 border-green-200',
+    card: 'bg-green-50/50 border-green-100',
+    accent: 'text-green-600',
+    bg: 'bg-green-400'
   },
-  { // Soft Lavender
+  { // Rojo
     id: 3,
-    tag: 'bg-violet-100 text-violet-800 border-violet-200',
-    card: 'bg-violet-50/50 border-violet-100',
-    accent: 'text-violet-600',
-    bg: 'bg-violet-300'
+    tag: 'bg-red-100 text-red-800 border-red-200',
+    card: 'bg-red-50/50 border-red-100',
+    accent: 'text-red-600',
+    bg: 'bg-red-400'
   },
-  { // Pale Rose
+  { // Amarillo
     id: 4,
-    tag: 'bg-rose-100 text-rose-800 border-rose-200',
-    card: 'bg-rose-50/50 border-rose-100',
-    accent: 'text-rose-600',
-    bg: 'bg-rose-300'
+    tag: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    card: 'bg-yellow-50/50 border-yellow-100',
+    accent: 'text-yellow-600',
+    bg: 'bg-yellow-400'
+  },
+  { // Morado
+    id: 5,
+    tag: 'bg-purple-100 text-purple-800 border-purple-200',
+    card: 'bg-purple-50/50 border-purple-100',
+    accent: 'text-purple-600',
+    bg: 'bg-purple-400'
   }
 ];
 
