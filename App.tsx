@@ -280,7 +280,7 @@ const App: React.FC = () => {
     try {
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
-      let csvContent = "id,nombre,referencia,total,pct_90d,pct_30d,sem_anterior,sem_actual\n";
+      let csvContent = "id,nombre,referencia,total,pct_90d,pct_30d,sem_2,sem_anterior,sem_actual\n";
       
       habits.forEach(h => {
         const now = new Date(); now.setHours(0,0,0,0);
@@ -289,6 +289,8 @@ const App: React.FC = () => {
         const sunThisWeek = getSundayOfDate(now);
         const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
         const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
+        const sunTwoWeeksAgo = new Date(sunThisWeek); sunTwoWeeksAgo.setDate(sunTwoWeeksAgo.getDate() - 14);
+        const satTwoWeeksAgo = new Date(sunThisWeek); satTwoWeeksAgo.setDate(satTwoWeeksAgo.getDate() - 8);
 
         const completions = Object.keys(h.completions).sort();
         const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
@@ -297,10 +299,11 @@ const App: React.FC = () => {
         const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
         const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
         const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
+        const rateTwoWeeksAgo = calculateRateInRange(h, sunTwoWeeksAgo, satTwoWeeksAgo);
         const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
 
         const ref = h.reference !== undefined ? h.reference : '';
-        csvContent += `${h.id},"${h.name}",${ref},${totalRate},${rate90d},${rate30d},${ratePrevWeek},${rateCurWeek}\n`;
+        csvContent += `${h.id},"${h.name}",${ref},${totalRate},${rate90d},${rate30d},${rateTwoWeeksAgo},${ratePrevWeek},${rateCurWeek}\n`;
       });
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -596,6 +599,7 @@ const App: React.FC = () => {
                     <th className="px-4 py-2 text-center">Total</th>
                     <th className="px-4 py-2 text-center">% 90d</th>
                     <th className="px-4 py-2 text-center">% 30d</th>
+                    <th className="px-4 py-2 text-center">Sem-2</th>
                     <th className="px-4 py-2 text-center">Sem-1</th>
                     <th className="px-4 py-2 text-center">% Sem</th>
                   </tr>
@@ -608,6 +612,8 @@ const App: React.FC = () => {
                     const sunThisWeek = getSundayOfDate(now);
                     const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
                     const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
+                    const sunTwoWeeksAgo = new Date(sunThisWeek); sunTwoWeeksAgo.setDate(sunTwoWeeksAgo.getDate() - 14);
+                    const satTwoWeeksAgo = new Date(sunThisWeek); satTwoWeeksAgo.setDate(satTwoWeeksAgo.getDate() - 8);
 
                     const completions = Object.keys(h.completions).sort();
                     const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
@@ -616,6 +622,7 @@ const App: React.FC = () => {
                     const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
                     const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
                     const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
+                    const rateTwoWeeksAgo = calculateRateInRange(h, sunTwoWeeksAgo, satTwoWeeksAgo);
                     const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
 
                     const getCellStyles = (val: number, ref: number | undefined) => {
@@ -633,7 +640,8 @@ const App: React.FC = () => {
                         <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(totalRate, h.reference)}`}>{totalRate}%</td>
                         <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rate90d, totalRate)}`}>{rate90d}%</td>
                         <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rate30d, rate90d)}`}>{rate30d}%</td>
-                        <td className="px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 bg-gray-50/50 opacity-40">{ratePrevWeek}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rateTwoWeeksAgo, rate30d)}`}>{rateTwoWeeksAgo}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(ratePrevWeek, rateTwoWeeksAgo)}`}>{ratePrevWeek}%</td>
                         <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-r-2 border-black/5 rounded-r-2xl ${getCellStyles(rateCurWeek, ratePrevWeek)}`}>{rateCurWeek}%</td>
                       </tr>
                     );
