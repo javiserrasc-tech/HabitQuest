@@ -606,7 +606,7 @@ const App: React.FC = () => {
               <table className="w-full text-left border-separate border-spacing-y-2">
                 <thead>
                   <tr className="text-[9px] font-black uppercase opacity-40">
-                    <th className="px-4 py-2">Hábito</th>
+                    <th className="px-4 py-2 sticky left-0 z-10 bg-[#fffcf0]">Hábito</th>
                     <th className="px-4 py-2 text-center">Ref.</th>
                     <th className="px-4 py-2 text-center">Total</th>
                     <th className="px-4 py-2 text-center">% 90d</th>
@@ -647,7 +647,7 @@ const App: React.FC = () => {
 
                     return (
                       <tr key={h.id} className="bg-white border-2 border-black/5 rounded-2xl shadow-sm overflow-hidden">
-                        <td className={`px-4 py-4 font-bold text-sm border-y-2 border-l-2 border-black/5 rounded-l-2xl ${theme.tag}`}>{h.name}</td>
+                        <td className={`px-4 py-4 font-bold text-sm border-y-2 border-l-2 border-black/5 rounded-l-2xl sticky left-0 z-10 ${theme.tag}`}>{h.name}</td>
                         <td className="px-4 py-4 text-center font-black text-xs border-y-2 border-black/5 opacity-40">{h.reference !== undefined ? `${h.reference}%` : '—'}</td>
                         <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(totalRate, h.reference)}`}>{totalRate}%</td>
                         <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rate90d, totalRate)}`}>{rate90d}%</td>
