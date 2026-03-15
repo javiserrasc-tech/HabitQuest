@@ -39,12 +39,15 @@ const App: React.FC = () => {
   const [expandedHabitId, setExpandedHabitId] = useState<number | null>(null);
   const [isReorderMode, setIsReorderMode] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
+  const [isLandscape, setIsLandscape] = useState(
+    () => window.matchMedia('(orientation: landscape)').matches
+  );
+
   useEffect(() => {
-    const handler = () => setIsLandscape(window.innerWidth > window.innerHeight);
-    window.addEventListener('resize', handler);
-    window.addEventListener('orientationchange', handler);
-    return () => { window.removeEventListener('resize', handler); window.removeEventListener('orientationchange', handler); };
+    const mq = window.matchMedia('(orientation: landscape)');
+    const handler = (e: MediaQueryListEvent) => setIsLandscape(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, []);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
