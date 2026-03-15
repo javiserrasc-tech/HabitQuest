@@ -39,38 +39,6 @@ const App: React.FC = () => {
   const [expandedHabitId, setExpandedHabitId] = useState<number | null>(null);
   const [isReorderMode, setIsReorderMode] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [isLandscape, setIsLandscape] = useState(
-    () => window.innerWidth > window.innerHeight
-  );
-
-  useEffect(() => {
-    const update = () => setIsLandscape(window.innerWidth > window.innerHeight);
-    
-    const mq = window.matchMedia('(orientation: landscape)');
-    
-    // Compatibilidad con Android Chrome antiguo
-    if (mq.addEventListener) {
-      mq.addEventListener('change', update);
-    } else {
-      (mq as any).addListener(update);
-    }
-    
-    window.addEventListener('resize', update);
-    window.addEventListener('orientationchange', () => {
-      setTimeout(update, 100);
-      setTimeout(update, 300);
-      setTimeout(update, 500);
-    });
-
-    return () => {
-      if (mq.removeEventListener) {
-        mq.removeEventListener('change', update);
-      } else {
-        (mq as any).removeListener(update);
-      }
-      window.removeEventListener('resize', update);
-    };
-  }, []);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -435,7 +403,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`${isLandscape ? 'max-w-full' : 'max-w-md mx-auto'} min-h-screen flex flex-col relative text-orange-950 bg-[#fffcf0]`}>
+    <div id="app-container" className="max-w-md mx-auto min-h-screen flex flex-col relative text-orange-950 bg-[#fffcf0]">
       <div className="px-6 pt-10 flex justify-between items-center mb-2">
         <div className="flex gap-2">
           <button onClick={() => setIsTagManagerOpen(true)} className="p-3 rounded-2xl border bg-white/60 border-black/5 text-black/60 shadow-sm"><Icons.Settings /></button>
@@ -447,7 +415,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <div className={`flex-1 overflow-y-auto ${isLandscape ? 'pb-8 pl-24' : 'pb-32'}`}>
+      <div id="main-content" className="flex-1 overflow-y-auto pb-32">
         {currentView === 'habits' ? (
           <div className="px-6 animate-in fade-in duration-500">
             <header className="mb-8 mt-4">
@@ -634,7 +602,7 @@ const App: React.FC = () => {
                 {panelFeedback.message}
               </div>
             )}
-            <div id="panel-table-container" className={`overflow-x-auto pb-12 ${isLandscape ? 'text-sm' : ''}`}>
+            <div id="panel-table-container" className="overflow-x-auto pb-12">
               <table className="w-full text-left border-separate border-spacing-y-2">
                 <thead>
                   <tr className="text-[9px] font-black uppercase opacity-40">
@@ -698,8 +666,8 @@ const App: React.FC = () => {
       }
     </div>
 
-      <nav className={`fixed ${isLandscape ? 'left-0 top-0 bottom-0 w-20 flex-col justify-center rounded-none border-r border-t-0 py-8 px-0 max-w-none mx-0' : 'bottom-0 left-0 right-0 max-w-md mx-auto border-t px-12 py-5 rounded-t-[32px]'} backdrop-blur-xl flex justify-between items-center z-40 shadow-2xl bg-white/80 border-black/5`}>
-        <button onClick={() => { setNewId(String(getFirstAvailableId())); setNewReference(''); setIsModalOpen(true); }} className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl bg-orange-700 text-white ${isLandscape ? '' : '-mt-10'} border-4 border-white active:scale-90 transition-transform`}><Icons.Plus /></button>
+      <nav id="nav-bar" className="fixed bottom-0 left-0 right-0 max-w-md mx-auto border-t px-12 py-5 rounded-t-[32px] backdrop-blur-xl flex justify-between items-center z-40 shadow-2xl bg-white/80 border-black/5">
+        <button id="nav-plus-btn" onClick={() => { setNewId(String(getFirstAvailableId())); setNewReference(''); setIsModalOpen(true); }} className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl bg-orange-700 text-white -mt-10 border-4 border-white active:scale-90 transition-transform"><Icons.Plus /></button>
         <button onClick={() => setCurrentView('habits')} className={`flex flex-col items-center gap-1.5 ${currentView === 'habits' ? 'text-orange-700' : 'opacity-30'}`}><Icons.Target /><span className="text-[9px] font-black uppercase">Hábitos</span></button>
         <button onClick={() => setCurrentView('analysis')} className={`flex flex-col items-center gap-1.5 ${currentView === 'analysis' ? 'text-orange-700' : 'opacity-30'}`}><Icons.Chart /><span className="text-[9px] font-black uppercase">Análisis</span></button>
         <button onClick={() => setCurrentView('panel')} className={`flex flex-col items-center gap-1.5 ${currentView === 'panel' ? 'text-orange-700' : 'opacity-30'}`}><Icons.Table /><span className="text-[9px] font-black uppercase">Panel</span></button>
@@ -707,8 +675,8 @@ const App: React.FC = () => {
 
       {/* Modales - Se mantienen igual para no perder funcionalidad */}
       {isSyncModalOpen && (
-        <div className={`fixed inset-0 z-[100] flex ${isLandscape ? 'items-center justify-center' : 'items-end justify-center'} bg-black/60 backdrop-blur-sm p-0`}>
-          <div className={`w-full max-w-md ${isLandscape ? 'rounded-[32px] max-h-[85vh] overflow-y-auto' : 'rounded-t-[48px]'} p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl`}>
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
             <h3 className="text-3xl font-black mb-2 text-center">Exportar CSV</h3>
             <p className="text-[10px] text-center font-black uppercase opacity-40 mb-8">Selecciona el rango de fechas</p>
             <div className="space-y-4">
@@ -757,8 +725,8 @@ const App: React.FC = () => {
       )}
 
       {isModalOpen && (
-        <div className={`fixed inset-0 z-[100] flex ${isLandscape ? 'items-center justify-center' : 'items-end justify-center'} bg-black/60 backdrop-blur-sm p-0`}>
-          <form onSubmit={handleAddHabit} className={`w-full max-w-md ${isLandscape ? 'rounded-[32px] max-h-[85vh] overflow-y-auto' : 'rounded-t-[48px]'} p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl overflow-y-auto max-h-[90vh]`}>
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+          <form onSubmit={handleAddHabit} className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl overflow-y-auto max-h-[90vh]">
             <h3 className="text-3xl font-black mb-8">Nuevo Hábito</h3>
             <div className="space-y-5">
               <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">ID Sheet (Manual)</p><input required type="number" value={newId} onChange={e => setNewId(e.target.value)} className={`w-full px-6 py-4 rounded-2xl border font-bold ${isIdTaken(parseInt(newId)) ? 'border-rose-500 bg-rose-50' : 'bg-white border-black/5'}`} placeholder="ID..." />{isIdTaken(parseInt(newId)) && <p className="text-[9px] text-rose-500 font-bold ml-2">Este ID ya está en uso</p>}</div>
@@ -787,7 +755,7 @@ const App: React.FC = () => {
       )}
 
       {isPastDateModalOpen && selectedHabitForPastDate && (
-        <div className={`fixed inset-0 z-[100] flex ${isLandscape ? 'items-center justify-center' : 'items-end justify-center'} bg-black/60 backdrop-blur-sm p-0`}>
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
           <form onSubmit={(e) => {
             e.preventDefault();
             setHabits(prev => prev.map(h => {
@@ -798,7 +766,7 @@ const App: React.FC = () => {
               return h;
             }));
             setIsPastDateModalOpen(false);
-          }} className={`w-full max-w-md ${isLandscape ? 'rounded-[32px] max-h-[85vh] overflow-y-auto' : 'rounded-t-[48px]'} p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl`}>
+          }} className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
             <h3 className="text-3xl font-black mb-2 text-center">Registro Pasado</h3>
             <p className="text-[10px] text-center font-black uppercase opacity-40 mb-8">{selectedHabitForPastDate.name}</p>
             <div className="space-y-5">
@@ -816,8 +784,8 @@ const App: React.FC = () => {
       )}
 
       {analysisModalType && (
-        <div className={`fixed inset-0 z-[100] flex ${isLandscape ? 'items-center justify-center' : 'items-end justify-center'} bg-black/60 backdrop-blur-sm p-0`} onClick={() => setAnalysisModalType(null)}>
-          <div className={`w-full max-w-md ${isLandscape ? 'rounded-[32px] max-h-[85vh] overflow-y-auto' : 'rounded-t-[48px]'} p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl`} onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0" onClick={() => setAnalysisModalType(null)}>
+          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-3xl font-black mb-2 text-center">
               {analysisModalType === 'improving' ? 'Mejorando este mes' : 'Empeorando este mes'}
             </h3>
@@ -843,8 +811,8 @@ const App: React.FC = () => {
       )}
 
       {isEditModalOpen && editingHabit && (
-        <div className={`fixed inset-0 z-[100] flex ${isLandscape ? 'items-center justify-center' : 'items-end justify-center'} bg-black/60 backdrop-blur-sm p-0`}>
-          <form onSubmit={(e) => { e.preventDefault(); setHabits(prev => prev.map(h => h.id === editingHabit.id ? editingHabit : h)); setIsEditModalOpen(false); }} className={`w-full max-w-md ${isLandscape ? 'rounded-[32px] max-h-[85vh] overflow-y-auto' : 'rounded-t-[48px]'} p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl`}>
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+          <form onSubmit={(e) => { e.preventDefault(); setHabits(prev => prev.map(h => h.id === editingHabit.id ? editingHabit : h)); setIsEditModalOpen(false); }} className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
             <h3 className="text-3xl font-black mb-8 text-center">Editar Hábito</h3>
             <div className="space-y-5">
               <div className="space-y-2 opacity-50"><p className="text-[10px] font-black uppercase ml-2">ID Sheet (No editable)</p><div className="w-full px-6 py-4 rounded-2xl border bg-gray-100 font-bold text-sm">{editingHabit.id}</div></div>
@@ -873,8 +841,8 @@ const App: React.FC = () => {
       )}
 
       {isTagManagerOpen && (
-        <div className={`fixed inset-0 z-[100] flex ${isLandscape ? 'items-center justify-center' : 'items-end justify-center'} bg-black/60 backdrop-blur-sm p-0`}>
-          <div className={`w-full max-w-md ${isLandscape ? 'rounded-[32px] max-h-[85vh] overflow-y-auto' : 'rounded-t-[48px]'} p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl`}>
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
             <h3 className="text-3xl font-black mb-8 text-center">Categorías</h3>
             <div className="mb-6 flex gap-2">
               <input
