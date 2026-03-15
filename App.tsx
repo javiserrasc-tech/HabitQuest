@@ -38,6 +38,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('habits');
   const [expandedHabitId, setExpandedHabitId] = useState<number | null>(null);
   const [isReorderMode, setIsReorderMode] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -117,6 +118,10 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleArchiveHabit = (id: number) => {
+    setHabits(prev => prev.map(h => h.id === id ? { ...h, archived: !h.archived } : h));
+  };
+
   const getFirstAvailableId = () => {
     const ids = new Set(habits.map(h => h.id));
     let id = 1;
@@ -186,7 +191,7 @@ const App: React.FC = () => {
     const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
     const firstThisYear = new Date(now.getFullYear(), 0, 1);
 
-    return habits.map(h => {
+    return habits.filter(h => !h.archived).map(h => {
       const curWeek = calculateRateInRange(h, sunThisWeek, new Date());
       const prevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
       const curMonth = calculateRateInRange(h, firstThisMonth, now);
@@ -400,6 +405,7 @@ const App: React.FC = () => {
           <button onClick={() => setIsReorderMode(!isReorderMode)} className={`p-3 rounded-2xl border shadow-sm ${isReorderMode ? 'bg-orange-600 text-white' : 'bg-white/60 border-black/5 text-black/60'}`}><Icons.Move /></button>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowArchived(!showArchived)} className={`p-3 rounded-2xl border shadow-sm ${showArchived ? 'bg-orange-600 text-white' : 'bg-white/60 border-black/5 text-black/60'}`}><Icons.Archive /></button>
           <button onClick={() => { setCsvFeedback(null); setIsSyncModalOpen(true); }} className="p-3 rounded-2xl border bg-white/60 border-black/5 text-black/60 shadow-sm"><Icons.Cloud /></button>
         </div>
       </div>
@@ -417,7 +423,7 @@ const App: React.FC = () => {
               </p>
             </header>
             <section className="space-y-4">
-              {habits.map((h, idx) => {
+              {habits.filter(h => showArchived || !h.archived).map((h, idx) => {
                 const now = new Date(); now.setHours(0,0,0,0);
                 const sunThisWeek = getSundayOfDate(now);
                 const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
@@ -431,6 +437,7 @@ const App: React.FC = () => {
                     onToggle={handleToggleHabit} onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} 
                     onEdit={(h) => { setEditingHabit({...h}); setIsEditModalOpen(true); }}
                     onLogPast={(h) => { setSelectedHabitForPastDate(h); setIsPastDateModalOpen(true); }}
+                    onArchive={handleArchiveHabit}
                     isReorderMode={isReorderMode} isFirst={idx === 0} isLast={idx === habits.length - 1}
                     onMoveUp={() => { const n = [...habits]; [n[idx], n[idx-1]] = [n[idx-1], n[idx]]; setHabits(n); }}
                     onMoveDown={() => { const n = [...habits]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; setHabits(n); }}
@@ -471,7 +478,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
               </div>
-              {habits.map(habit => {
+              {habits.filter(h => !h.archived).map(habit => {
                 const tagData = userTags.find(t => t.name === habit.category);
                 const theme = getTagStyles(habit.category, tagData?.colorIndex);
                 const data = analysisData.find(d => d.id === habit.id);
@@ -605,7 +612,7 @@ const App: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {habits.map(h => {
+                  {habits.filter(h => !h.archived).map(h => {
                     const now = new Date(); now.setHours(0,0,0,0);
                     const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
                     const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);

@@ -10,6 +10,7 @@ interface HabitCardProps {
   onDelete: (id: number) => void;
   onLogPast: (habit: Habit) => void;
   onEdit: (habit: Habit) => void;
+  onArchive: (id: number) => void;
   status: HabitStatus;
   isReorderMode?: boolean;
   onMoveUp?: () => void;
@@ -21,7 +22,7 @@ interface HabitCardProps {
 }
 
 const HabitCard: React.FC<HabitCardProps> = ({ 
-  habit, userTags, onToggle, onDelete, onLogPast, onEdit, status, isReorderMode, onMoveUp, onMoveDown, isFirst, isLast, curWeek, prevWeek
+  habit, userTags, onToggle, onDelete, onLogPast, onEdit, onArchive, status, isReorderMode, onMoveUp, onMoveDown, isFirst, isLast, curWeek, prevWeek
 }) => {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
@@ -80,6 +81,7 @@ const HabitCard: React.FC<HabitCardProps> = ({
               </div>
             ) : (
               <div className="flex">
+                <button onClick={() => onArchive(habit.id)} className={`p-1.5 transition-colors ${habit.archived ? 'text-orange-600' : 'text-black/10 hover:text-black/40'}`} title={habit.archived ? "Desarchivar" : "Archivar"}><Icons.Archive /></button>
                 <button onClick={() => onEdit(habit)} className="p-1.5 text-black/10 hover:text-black/40"><Icons.Edit /></button>
                 <button onClick={() => onLogPast(habit)} className="p-1.5 text-black/10 hover:text-black/40"><Icons.Calendar /></button>
                 <button onClick={() => setIsConfirmingDelete(true)} className="p-1.5 text-black/10 hover:text-rose-500"><Icons.Trash /></button>

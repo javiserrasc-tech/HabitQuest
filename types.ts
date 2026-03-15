@@ -20,4 +20,5 @@ export interface Habit {
   createdAt: string;
   streak: number;
   reference?: number;
+  archived?: boolean;
 }
