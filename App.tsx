@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Habit, UserTag, HabitStatus } from './types';
 import { Icons, getTagStyles, COLOR_PALETTE } from './constants';
 import HabitCard from './components/HabitCard';
@@ -9,7 +9,6 @@ const TAGS_KEY = 'habitquest_tags_v4';
 const DEFAULT_TAG: UserTag = { name: 'General', colorIndex: 0 };
 
 type View = 'habits' | 'analysis' | 'panel';
-type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error';
 
 const getLocalDateString = (date: Date = new Date()) => {
   const year = date.getFullYear();
@@ -30,8 +29,13 @@ const getStartOfMonth = (date: Date) => {
   return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
 };
 
+const getCellStyles = (val: number, ref: number | undefined): string => {
+  if (ref === undefined) return "bg-gray-50 text-gray-500";
+  return val >= ref ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+};
+
 const App: React.FC = () => {
-  const todayStr = getLocalDateString();
+  const todayStr = useMemo(() => getLocalDateString(), []);
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [userTags, setUserTags] = useState<UserTag[]>([DEFAULT_TAG]);
@@ -57,7 +61,6 @@ const App: React.FC = () => {
   
   const [newId, setNewId] = useState<string>('');
   const [newName, setNewName] = useState('');
-  const [newType, setNewType] = useState<'positive' | 'negative'>('positive');
   const [selectedTagName, setSelectedTagName] = useState(DEFAULT_TAG.name);
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [newReference, setNewReference] = useState<string>('');
@@ -210,6 +213,51 @@ const App: React.FC = () => {
     });
   }, [habits]);
 
+  const weekDates = useMemo(() => {
+    const now = new Date(); now.setHours(0,0,0,0);
+    const sunThisWeek = getSundayOfDate(now);
+    const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
+    const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
+    return { now, sunThisWeek, sunLastWeek, satLastWeek };
+  }, []);
+
+  const panelData = useMemo(() => {
+    const now = new Date(); now.setHours(0,0,0,0);
+    const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
+    const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
+    const sunThisWeek = getSundayOfDate(now);
+    const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
+    const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
+    const sunTwoWeeksAgo = new Date(sunThisWeek); sunTwoWeeksAgo.setDate(sunTwoWeeksAgo.getDate() - 14);
+    const satTwoWeeksAgo = new Date(sunThisWeek); satTwoWeeksAgo.setDate(satTwoWeeksAgo.getDate() - 8);
+
+    return habits.filter(h => !h.archived).map(h => {
+      const completions = Object.keys(h.completions).sort();
+      const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
+      
+      const totalRate = calculateRateInRange(h, startDate, now);
+      const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
+      const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
+      const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
+      const rateTwoWeeksAgo = calculateRateInRange(h, sunTwoWeeksAgo, satTwoWeeksAgo);
+      const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
+
+      return { id: h.id, totalRate, rate90d, rate30d, rateTwoWeeksAgo, ratePrevWeek, rateCurWeek };
+    });
+  }, [habits]);
+
+  const downloadFile = (content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportCSV = () => {
     const start = new Date(exportStartDate + 'T00:00:00');
     const end = new Date(exportEndDate + 'T00:00:00');
@@ -225,14 +273,7 @@ const App: React.FC = () => {
       });
     });
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `habit_export_${exportStartDate}_${exportEndDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadFile(csvContent, `habit_export_${exportStartDate}_${exportEndDate}.csv`, 'text/csv;charset=utf-8;');
     setCsvFeedback({ type: 'success', message: "CSV exportado correctamente" });
   };
 
@@ -291,16 +332,9 @@ const App: React.FC = () => {
   const handleExportConfig = () => {
     try {
       const config = { habits, userTags };
-      const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `habitquest-config-${dateStr}.json`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      downloadFile(JSON.stringify(config, null, 2), `habitquest-config-${dateStr}.json`, 'application/json');
       setCsvFeedback({ type: 'success', message: "Configuración exportada correctamente" });
     } catch (error: any) {
       setCsvFeedback({ type: 'error', message: error.message || "Error al exportar configuración" });
@@ -371,14 +405,7 @@ const App: React.FC = () => {
         csvContent += `${h.id},"${h.name}",${ref},${totalRate},${rate90d},${rate30d},${rateTwoWeeksAgo},${ratePrevWeek},${rateCurWeek}\n`;
       });
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `panel-${dateStr}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      downloadFile(csvContent, `panel-${dateStr}.csv`, 'text/csv;charset=utf-8;');
       setPanelFeedback({ type: 'success', message: "CSV exportado correctamente" });
     } catch (error: any) {
       setPanelFeedback({ type: 'error', message: error.message || "Error al exportar CSV" });
@@ -451,7 +478,7 @@ const App: React.FC = () => {
     if (!newName.trim() || isNaN(idNum) || isIdTaken(idNum)) return;
     const refNum = newReference ? parseInt(newReference) : undefined;
     const newHabit: Habit = {
-      id: idNum, name: newName, description: '', category: selectedTagName, type: newType, frequency: newFreq, color: '', completions: {}, createdAt: new Date().toISOString(), streak: 0, reference: refNum
+      id: idNum, name: newName, category: selectedTagName, type: 'positive', frequency: newFreq, completions: {}, createdAt: new Date().toISOString(), streak: 0, reference: refNum
     };
     setHabits(prev => [...prev, newHabit]);
     setNewName(''); setNewReference(''); setIsModalOpen(false);
@@ -484,12 +511,8 @@ const App: React.FC = () => {
             </header>
             <section className="space-y-4">
               {habits.filter(h => showArchived || !h.archived).map((h, idx) => {
-                const now = new Date(); now.setHours(0,0,0,0);
-                const sunThisWeek = getSundayOfDate(now);
-                const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
-                const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
-                const curWeek = calculateRateInRange(h, sunThisWeek, new Date());
-                const prevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
+                const curWeek = calculateRateInRange(h, weekDates.sunThisWeek, new Date());
+                const prevWeek = calculateRateInRange(h, weekDates.sunLastWeek, weekDates.satLastWeek);
 
                 return (
                   <HabitCard 
@@ -673,29 +696,8 @@ const App: React.FC = () => {
                 </thead>
                 <tbody>
                   {habits.filter(h => !h.archived).map(h => {
-                    const now = new Date(); now.setHours(0,0,0,0);
-                    const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
-                    const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
-                    const sunThisWeek = getSundayOfDate(now);
-                    const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
-                    const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
-                    const sunTwoWeeksAgo = new Date(sunThisWeek); sunTwoWeeksAgo.setDate(sunTwoWeeksAgo.getDate() - 14);
-                    const satTwoWeeksAgo = new Date(sunThisWeek); satTwoWeeksAgo.setDate(satTwoWeeksAgo.getDate() - 8);
-
-                    const completions = Object.keys(h.completions).sort();
-                    const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
-                    
-                    const totalRate = calculateRateInRange(h, startDate, now);
-                    const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
-                    const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
-                    const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
-                    const rateTwoWeeksAgo = calculateRateInRange(h, sunTwoWeeksAgo, satTwoWeeksAgo);
-                    const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
-
-                    const getCellStyles = (val: number, ref: number | undefined) => {
-                      if (ref === undefined) return "bg-gray-50 text-gray-500";
-                      return val >= ref ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
-                    };
+                    const data = panelData.find(d => d.id === h.id);
+                    if (!data) return null;
 
                     const tagData = userTags.find(t => t.name === h.category);
                     const theme = getTagStyles(h.category, tagData?.colorIndex);
@@ -704,12 +706,12 @@ const App: React.FC = () => {
                       <tr key={h.id} className="bg-white border-2 border-black/5 rounded-2xl shadow-sm overflow-hidden">
                         <td className={`px-4 py-4 font-bold text-sm border-y-2 border-l-2 border-black/5 rounded-l-2xl sticky left-0 z-10 ${theme.tag}`}>{h.name}</td>
                         <td className="px-4 py-4 text-center font-black text-xs border-y-2 border-black/5 opacity-40">{h.reference !== undefined ? `${h.reference}%` : '—'}</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(totalRate, h.reference)}`}>{totalRate}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rate90d, totalRate)}`}>{rate90d}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rate30d, rate90d)}`}>{rate30d}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(rateTwoWeeksAgo, rate30d)}`}>{rateTwoWeeksAgo}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(ratePrevWeek, rateTwoWeeksAgo)}`}>{ratePrevWeek}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-r-2 border-black/5 rounded-r-2xl ${getCellStyles(rateCurWeek, ratePrevWeek)}`}>{rateCurWeek}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.totalRate, h.reference)}`}>{data.totalRate}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.rate90d, data.totalRate)}`}>{data.rate90d}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.rate30d, data.rate90d)}`}>{data.rate30d}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.rateTwoWeeksAgo, data.rate30d)}`}>{data.rateTwoWeeksAgo}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.ratePrevWeek, data.rateTwoWeeksAgo)}`}>{data.ratePrevWeek}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-r-2 border-black/5 rounded-r-2xl ${getCellStyles(data.rateCurWeek, data.ratePrevWeek)}`}>{data.rateCurWeek}%</td>
                       </tr>
                     );
                   })}
@@ -731,7 +733,7 @@ const App: React.FC = () => {
       {/* Modales - Se mantienen igual para no perder funcionalidad */}
       {isSyncModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
-          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
+          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl overflow-y-auto max-h-[90vh]">
             <h3 className="text-3xl font-black mb-2 text-center">Exportar CSV</h3>
             <p className="text-[10px] text-center font-black uppercase opacity-40 mb-8">Selecciona el rango de fechas</p>
             <div className="space-y-4">

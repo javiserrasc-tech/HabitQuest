@@ -32,6 +32,12 @@ const HabitCard: React.FC<HabitCardProps> = ({
   const tagData = userTags.find(t => t.name === habit.category);
   const theme = getTagStyles(habit.category, tagData?.colorIndex);
 
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
   const startDeleteTimer = () => {
     startTimeRef.current = Date.now(); setDeleteProgress(0);
     timerRef.current = window.setInterval(() => {
