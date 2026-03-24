@@ -111,13 +111,58 @@ const App: React.FC = () => {
     return newCompletions;
   };
 
+  const calculateStreak = (habit: Habit, completions: Record<string, 'success' | 'failure'>): number => {
+    const today = new Date(); today.setHours(0,0,0,0);
+    let streak = 0;
+
+    if (habit.frequency === 'daily') {
+      let curr = new Date(today);
+      while (true) {
+        const dateStr = getLocalDateString(curr);
+        if (completions[dateStr] === 'success') {
+          streak++;
+          curr.setDate(curr.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+    } else if (habit.frequency === 'weekly') {
+      let curr = getSundayOfDate(today);
+      while (true) {
+        const wS = getLocalDateString(curr);
+        const wE = getLocalDateString(new Date(curr.getTime() + 6 * 24 * 60 * 60 * 1000));
+        const hasSuccess = Object.keys(completions).some(d => d >= wS && d <= wE && completions[d] === 'success');
+        if (hasSuccess) {
+          streak++;
+          curr.setDate(curr.getDate() - 7);
+        } else {
+          break;
+        }
+      }
+    } else {
+      let curr = getStartOfMonth(today);
+      while (true) {
+        const mS = getLocalDateString(curr);
+        const mE = getLocalDateString(new Date(curr.getFullYear(), curr.getMonth() + 1, 0));
+        const hasSuccess = Object.keys(completions).some(d => d >= mS && d <= mE && completions[d] === 'success');
+        if (hasSuccess) {
+          streak++;
+          curr.setMonth(curr.getMonth() - 1);
+        } else {
+          break;
+        }
+      }
+    }
+    return streak;
+  };
+
   const handleToggleHabit = (id: number) => {
     setHabits(prev => prev.map(h => {
       if (h.id === id) {
         const currentStatus = getHabitStatusForDate(h, selectedDate);
-        let nextStatus: HabitStatus = currentStatus === 'neutral' ? 'success' : currentStatus === 'success' ? 'failure' : 'neutral';
+        const nextStatus: HabitStatus = currentStatus === 'neutral' ? 'success' : currentStatus === 'success' ? 'failure' : 'neutral';
         const newCompletions = updateHabitCompletions(h, selectedDate, nextStatus);
-        return { ...h, completions: newCompletions, streak: nextStatus === 'success' ? h.streak + 1 : (nextStatus === 'failure' ? 0 : h.streak) };
+        return { ...h, completions: newCompletions, streak: calculateStreak({ ...h, completions: newCompletions }, newCompletions) };
       }
       return h;
     }));
