@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Habit, UserTag, HabitStatus } from '../types';
 import { getTagStyles, Icons } from '../constants';
@@ -32,12 +31,6 @@ const HabitCard: React.FC<HabitCardProps> = ({
   const tagData = userTags.find(t => t.name === habit.category);
   const theme = getTagStyles(habit.category, tagData?.colorIndex);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, []);
-
   const startDeleteTimer = () => {
     startTimeRef.current = Date.now(); setDeleteProgress(0);
     timerRef.current = window.setInterval(() => {
@@ -49,6 +42,12 @@ const HabitCard: React.FC<HabitCardProps> = ({
   };
 
   const stopDeleteTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } setDeleteProgress(0); };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
   if (isConfirmingDelete) {
     return (
