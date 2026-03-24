@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Habit, UserTag, HabitStatus } from './types';
 import { Icons, getTagStyles, COLOR_PALETTE } from './constants';
@@ -191,6 +190,14 @@ const App: React.FC = () => {
     }
   };
 
+  const weekDates = useMemo(() => {
+    const now = new Date(); now.setHours(0,0,0,0);
+    const sunThisWeek = getSundayOfDate(now);
+    const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
+    const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
+    return { now, sunThisWeek, sunLastWeek, satLastWeek };
+  }, []);
+
   const analysisData = useMemo(() => {
     const now = new Date(); now.setHours(0,0,0,0);
     const sunThisWeek = getSundayOfDate(now);
@@ -213,14 +220,6 @@ const App: React.FC = () => {
     });
   }, [habits]);
 
-  const weekDates = useMemo(() => {
-    const now = new Date(); now.setHours(0,0,0,0);
-    const sunThisWeek = getSundayOfDate(now);
-    const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
-    const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
-    return { now, sunThisWeek, sunLastWeek, satLastWeek };
-  }, []);
-
   const panelData = useMemo(() => {
     const now = new Date(); now.setHours(0,0,0,0);
     const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
@@ -234,15 +233,15 @@ const App: React.FC = () => {
     return habits.filter(h => !h.archived).map(h => {
       const completions = Object.keys(h.completions).sort();
       const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
-      
-      const totalRate = calculateRateInRange(h, startDate, now);
-      const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
-      const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
-      const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
-      const rateTwoWeeksAgo = calculateRateInRange(h, sunTwoWeeksAgo, satTwoWeeksAgo);
-      const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
-
-      return { id: h.id, totalRate, rate90d, rate30d, rateTwoWeeksAgo, ratePrevWeek, rateCurWeek };
+      return {
+        id: h.id,
+        totalRate: calculateRateInRange(h, startDate, now),
+        rate90d: calculateRateInRange(h, ninetyDaysAgo, now),
+        rate30d: calculateRateInRange(h, thirtyDaysAgo, now),
+        rateTwoWeeksAgo: calculateRateInRange(h, sunTwoWeeksAgo, satTwoWeeksAgo),
+        ratePrevWeek: calculateRateInRange(h, sunLastWeek, satLastWeek),
+        rateCurWeek: calculateRateInRange(h, sunThisWeek, new Date()),
+      };
     });
   }, [habits]);
 
@@ -377,34 +376,14 @@ const App: React.FC = () => {
   const handleExportPanelCSV = () => {
     setPanelFeedback(null);
     try {
-      const now = new Date();
-      const dateStr = now.toISOString().split('T')[0];
+      const dateStr = new Date().toISOString().split('T')[0];
       let csvContent = "id,nombre,referencia,total,pct_90d,pct_30d,sem_2,sem_anterior,sem_actual\n";
-      
-      habits.forEach(h => {
-        const now = new Date(); now.setHours(0,0,0,0);
-        const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
-        const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
-        const sunThisWeek = getSundayOfDate(now);
-        const sunLastWeek = new Date(sunThisWeek); sunLastWeek.setDate(sunLastWeek.getDate() - 7);
-        const satLastWeek = new Date(sunThisWeek); satLastWeek.setDate(satLastWeek.getDate() - 1);
-        const sunTwoWeeksAgo = new Date(sunThisWeek); sunTwoWeeksAgo.setDate(sunTwoWeeksAgo.getDate() - 14);
-        const satTwoWeeksAgo = new Date(sunThisWeek); satTwoWeeksAgo.setDate(satTwoWeeksAgo.getDate() - 8);
-
-        const completions = Object.keys(h.completions).sort();
-        const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
-        
-        const totalRate = calculateRateInRange(h, startDate, now);
-        const rate90d = calculateRateInRange(h, ninetyDaysAgo, now);
-        const rate30d = calculateRateInRange(h, thirtyDaysAgo, now);
-        const ratePrevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
-        const rateTwoWeeksAgo = calculateRateInRange(h, sunTwoWeeksAgo, satTwoWeeksAgo);
-        const rateCurWeek = calculateRateInRange(h, sunThisWeek, new Date());
-
+      habits.filter(h => !h.archived).forEach(h => {
+        const d = panelData.find(p => p.id === h.id);
+        if (!d) return;
         const ref = h.reference !== undefined ? h.reference : '';
-        csvContent += `${h.id},"${h.name}",${ref},${totalRate},${rate90d},${rate30d},${rateTwoWeeksAgo},${ratePrevWeek},${rateCurWeek}\n`;
+        csvContent += `${h.id},"${h.name}",${ref},${d.totalRate},${d.rate90d},${d.rate30d},${d.rateTwoWeeksAgo},${d.ratePrevWeek},${d.rateCurWeek}\n`;
       });
-
       downloadFile(csvContent, `panel-${dateStr}.csv`, 'text/csv;charset=utf-8;');
       setPanelFeedback({ type: 'success', message: "CSV exportado correctamente" });
     } catch (error: any) {
@@ -696,8 +675,8 @@ const App: React.FC = () => {
                 </thead>
                 <tbody>
                   {habits.filter(h => !h.archived).map(h => {
-                    const data = panelData.find(d => d.id === h.id);
-                    if (!data) return null;
+                    const d = panelData.find(p => p.id === h.id);
+                    if (!d) return null;
 
                     const tagData = userTags.find(t => t.name === h.category);
                     const theme = getTagStyles(h.category, tagData?.colorIndex);
@@ -706,12 +685,12 @@ const App: React.FC = () => {
                       <tr key={h.id} className="bg-white border-2 border-black/5 rounded-2xl shadow-sm overflow-hidden">
                         <td className={`px-4 py-4 font-bold text-sm border-y-2 border-l-2 border-black/5 rounded-l-2xl sticky left-0 z-10 ${theme.tag}`}>{h.name}</td>
                         <td className="px-4 py-4 text-center font-black text-xs border-y-2 border-black/5 opacity-40">{h.reference !== undefined ? `${h.reference}%` : '—'}</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.totalRate, h.reference)}`}>{data.totalRate}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.rate90d, data.totalRate)}`}>{data.rate90d}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.rate30d, data.rate90d)}`}>{data.rate30d}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.rateTwoWeeksAgo, data.rate30d)}`}>{data.rateTwoWeeksAgo}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(data.ratePrevWeek, data.rateTwoWeeksAgo)}`}>{data.ratePrevWeek}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-r-2 border-black/5 rounded-r-2xl ${getCellStyles(data.rateCurWeek, data.ratePrevWeek)}`}>{data.rateCurWeek}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.totalRate, h.reference)}`}>{d.totalRate}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.rate90d, d.totalRate)}`}>{d.rate90d}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.rate30d, d.rate90d)}`}>{d.rate30d}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.rateTwoWeeksAgo, d.rate30d)}`}>{d.rateTwoWeeksAgo}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.ratePrevWeek, d.rateTwoWeeksAgo)}`}>{d.ratePrevWeek}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-r-2 border-black/5 rounded-r-2xl ${getCellStyles(d.rateCurWeek, d.ratePrevWeek)}`}>{d.rateCurWeek}%</td>
                       </tr>
                     );
                   })}
