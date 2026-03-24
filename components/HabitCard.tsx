@@ -107,6 +107,11 @@ const HabitCard: React.FC<HabitCardProps> = ({
                   vs {prevWeek}%
                 </span>
               )}
+              {habit.reference !== undefined && curWeek !== undefined && (
+                <span className={`text-[10px] font-black uppercase ${curWeek >= habit.reference ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  obj {habit.reference}%
+                </span>
+              )}
             </div>
           </div>
         </div>
