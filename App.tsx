@@ -576,12 +576,16 @@ const App: React.FC = () => {
         </tr>`;
       }).join('');
 
+      const pdfFileName = `Habitos_${String(year).slice(-2)}${String(month).padStart(2,'0')}`;
+
       const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
+  <title>${pdfFileName}</title>
   <style>
     @page { size: A4 landscape; margin: 10mm; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
     h1 { font-size: 14px; font-weight: 900; text-transform: capitalize; margin: 0 0 8px 0; color: #431407; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
