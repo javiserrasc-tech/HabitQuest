@@ -53,6 +53,11 @@ const App: React.FC = () => {
   
   const [exportStartDate, setExportStartDate] = useState(todayStr);
   const [exportEndDate, setExportEndDate] = useState(todayStr);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [pdfMonth, setPdfMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
   
   const [selectedHabitForPastDate, setSelectedHabitForPastDate] = useState<Habit | null>(null);
   const [pastDateToLog, setPastDateToLog] = useState(getLocalDateString());
@@ -496,6 +501,122 @@ const App: React.FC = () => {
     }
   };
 
+  const handleExportPDF = () => {
+    setPanelFeedback(null);
+    try {
+      const [year, month] = pdfMonth.split('-').map(Number);
+      const today = new Date(); today.setHours(0,0,0,0);
+      const firstDay = new Date(year, month - 1, 1);
+      const lastDay = new Date(year, month, 0);
+      const lastDayToShow = lastDay > today ? today : lastDay;
+      const daysInMonth = lastDay.getDate();
+      const daysToShow = lastDayToShow.getDate();
+
+      const monthName = firstDay.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+      const activeHabits = habits.filter(h => !h.archived);
+
+      // Calcular el color de cada celda por hábito y día
+      const getCellColor = (habit: Habit, day: number): 'success' | 'failure' | 'neutral' => {
+        const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const date = new Date(year, month - 1, day);
+
+        if (habit.frequency === 'daily') {
+          return habit.completions[dateStr] || 'neutral';
+        } else if (habit.frequency === 'weekly') {
+          const sunday = getSundayOfDate(date);
+          const wS = getLocalDateString(sunday);
+          const wE = getLocalDateString(new Date(sunday.getTime() + 6 * 24 * 60 * 60 * 1000));
+          const keys = Object.keys(habit.completions).filter(d => d >= wS && d <= wE);
+          if (keys.some(k => habit.completions[k] === 'success')) return 'success';
+          if (keys.some(k => habit.completions[k] === 'failure')) return 'failure';
+          return 'neutral';
+        } else {
+          const mS = `${year}-${String(month).padStart(2,'0')}-01`;
+          const mE = getLocalDateString(lastDay);
+          const keys = Object.keys(habit.completions).filter(d => d >= mS && d <= mE);
+          if (keys.some(k => habit.completions[k] === 'success')) return 'success';
+          if (keys.some(k => habit.completions[k] === 'failure')) return 'failure';
+          return 'neutral';
+        }
+      };
+
+      // Generar HTML del PDF
+      const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => {
+        const d = i + 1;
+        const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const dayName = new Date(year, month - 1, d).toLocaleDateString('es-ES', { weekday: 'short' })[0].toUpperCase();
+        const isFuture = d > daysToShow;
+        return `<th style="width:${100/(daysInMonth+1)}%;padding:3px 1px;text-align:center;font-size:8px;color:${isFuture ? '#ccc' : '#888'};font-weight:700;">${d}<br>${dayName}</th>`;
+      }).join('');
+
+      const rows = activeHabits.map(habit => {
+        const tagData = userTags.find(t => t.name === habit.category);
+        const theme = getTagStyles(habit.category, tagData?.colorIndex);
+        const bgColors: Record<string, string> = {
+          'bg-gray-100': '#f3f4f6', 'bg-blue-100': '#dbeafe',
+          'bg-green-100': '#dcfce7', 'bg-red-100': '#fee2e2',
+          'bg-yellow-100': '#fef9c3', 'bg-purple-100': '#f3e8ff'
+        };
+        const tagBg = bgColors[theme.tag.split(' ')[0]] || '#f3f4f6';
+
+        const cells = Array.from({ length: daysInMonth }, (_, i) => {
+          const d = i + 1;
+          const isFuture = d > daysToShow;
+          if (isFuture) return `<td style="background:#f9fafb;border:1px solid #e5e7eb;"></td>`;
+          const status = getCellColor(habit, d);
+          const bg = status === 'success' ? '#16a34a' : status === 'failure' ? '#dc2626' : '#f3f4f6';
+          const content = status === 'success' ? '✓' : status === 'failure' ? '✗' : '';
+          const color = status === 'neutral' ? 'transparent' : 'white';
+          return `<td style="background:${bg};border:1px solid #e5e7eb;text-align:center;font-size:9px;color:${color};font-weight:900;">${content}</td>`;
+        }).join('');
+
+        return `<tr>
+          <td style="padding:4px 8px;font-size:9px;font-weight:700;white-space:nowrap;background:${tagBg};border:1px solid #e5e7eb;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${habit.name}</td>
+          ${cells}
+        </tr>`;
+      }).join('');
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    h1 { font-size: 14px; font-weight: 900; text-transform: capitalize; margin: 0 0 8px 0; color: #431407; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid #e5e7eb; }
+  </style>
+</head>
+<body>
+  <h1>HabitQuest — ${monthName}</h1>
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:4px 8px;font-size:9px;width:15%;">Hábito</th>
+        ${dayHeaders}
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`;
+
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, '_blank');
+      if (win) {
+        win.onload = () => {
+          win.print();
+          URL.revokeObjectURL(url);
+        };
+      }
+      setPanelFeedback({ type: 'success', message: `PDF de ${monthName} listo para imprimir` });
+    } catch (error: any) {
+      setPanelFeedback({ type: 'error', message: error.message || "Error al generar el PDF" });
+    }
+  };
+
   const handleAddHabit = (e: React.FormEvent) => {
     e.preventDefault();
     const idNum = parseInt(newId);
@@ -694,6 +815,7 @@ const App: React.FC = () => {
             <div className="flex justify-end gap-2 mb-4">
               <button onClick={handleExportPanelCSV} className="px-3 py-2 rounded-xl border bg-white border-black/5 text-[9px] font-black uppercase shadow-sm active:scale-95 transition-transform">CSV Panel</button>
               <button onClick={handleExportPanelImage} className="px-3 py-2 rounded-xl border bg-white border-black/5 text-[9px] font-black uppercase shadow-sm active:scale-95 transition-transform">Imagen</button>
+              <button onClick={() => setIsPdfModalOpen(true)} className="px-3 py-2 rounded-xl border bg-white border-black/5 text-[9px] font-black uppercase shadow-sm active:scale-95 transition-transform">PDF Mes</button>
             </div>
             {panelFeedback && (
               <div className={`mb-4 p-4 rounded-2xl border text-xs font-bold ${
@@ -1054,6 +1176,30 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+      {isPdfModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
+          <div className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
+            <h3 className="text-3xl font-black mb-2 text-center">PDF Mensual</h3>
+            <p className="text-[10px] text-center font-black uppercase opacity-40 mb-8">Selecciona el mes a exportar</p>
+            <div className="space-y-4">
+              <input
+                type="month"
+                value={pdfMonth}
+                onChange={e => setPdfMonth(e.target.value)}
+                className="w-full px-5 py-4 rounded-2xl border bg-white font-bold text-sm"
+              />
+              <button
+                onClick={() => { handleExportPDF(); setIsPdfModalOpen(false); }}
+                className="w-full py-4 bg-black text-white rounded-2xl font-black uppercase text-[10px] shadow-lg"
+              >
+                Generar PDF
+              </button>
+              <button onClick={() => setIsPdfModalOpen(false)} className="w-full py-4 font-black uppercase text-[10px] opacity-40 text-center">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
