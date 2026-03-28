@@ -538,163 +538,151 @@ const App: React.FC = () => {
         }
       };
 
-      const CELL_SIZE = 28;
-      const CELL_GAP = 3;
-      const NAME_WIDTH = 200;
-      const totalWidth = NAME_WIDTH + (CELL_SIZE + CELL_GAP) * daysInMonth + 64;
+      const CELL = 30;
+      const GAP = 4;
+      const NAME_W = 210;
+      const PAD = 48;
+      const ROW_H = 38;
+      const HEADER_H = 100;
+      const totalWidth = PAD * 2 + NAME_W + GAP + (CELL + GAP) * daysInMonth;
+      const totalHeight = PAD + HEADER_H + ROW_H * activeHabits.length + PAD + 40;
 
-      const container = document.createElement('div');
-      container.style.cssText = `
-        position: fixed; left: -9999px; top: 0;
-        background: #fffcf0;
-        padding: 40px 32px 48px 32px;
-        font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, sans-serif;
-        width: ${totalWidth}px;
-        box-sizing: border-box;
-      `;
+      // Canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = totalWidth * 2;
+      canvas.height = totalHeight * 2;
+      const ctx = canvas.getContext('2d')!;
+      ctx.scale(2, 2);
 
-      // Cabecera
-      const header = document.createElement('div');
-      header.style.cssText = 'margin-bottom: 28px;';
-      header.innerHTML = `
-        <div style="font-size:11px;font-weight:700;color:#c2410c;letter-spacing:0.15em;text-transform:uppercase;opacity:0.5;margin-bottom:4px;">HabitQuest</div>
-        <div style="font-size:26px;font-weight:800;color:#431407;text-transform:capitalize;letter-spacing:-0.5px;">${monthName}</div>
-      `;
-      container.appendChild(header);
+      // Fondo papel
+      ctx.fillStyle = '#fdf8f0';
+      ctx.fillRect(0, 0, totalWidth, totalHeight);
 
-      const table = document.createElement('div');
-      table.style.cssText = 'display: flex; flex-direction: column; gap: 5px;';
+      // Líneas de libreta horizontales
+      ctx.strokeStyle = '#e8dfd0';
+      ctx.lineWidth = 0.8;
+      for (let y = HEADER_H; y < totalHeight - PAD; y += ROW_H) {
+        ctx.beginPath();
+        ctx.moveTo(PAD, y + ROW_H);
+        ctx.lineTo(totalWidth - PAD, y + ROW_H);
+        ctx.stroke();
+      }
 
-      // Fila cabecera días
-      const headerRow = document.createElement('div');
-      headerRow.style.cssText = `display: flex; align-items: center; gap: ${CELL_GAP}px; margin-bottom: 6px; padding-left: ${NAME_WIDTH + CELL_GAP}px;`;
+      // Línea vertical izquierda (margen libreta)
+      ctx.strokeStyle = '#f0c4a8';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(PAD + NAME_W + GAP / 2, HEADER_H - 10);
+      ctx.lineTo(PAD + NAME_W + GAP / 2, totalHeight - PAD);
+      ctx.stroke();
 
+      // Título manuscrito
+      ctx.fillStyle = '#7c3a1e';
+      ctx.font = `bold 11px 'Courier New', monospace`;
+      ctx.fillText('HABITQUEST', PAD, PAD + 14);
+
+      ctx.fillStyle = '#3d1f0e';
+      ctx.font = `bold 28px 'Courier New', monospace`;
+      const capitalMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+      ctx.fillText(capitalMonth, PAD, PAD + 48);
+
+      // Subrayado título
+      ctx.strokeStyle = '#c97040';
+      ctx.lineWidth = 1.5;
+      const titleWidth = ctx.measureText(capitalMonth).width;
+      ctx.beginPath();
+      ctx.moveTo(PAD, PAD + 54);
+      ctx.lineTo(PAD + titleWidth + 4, PAD + 54);
+      ctx.stroke();
+
+      // Cabecera días
+      ctx.font = `bold 10px 'Courier New', monospace`;
       for (let d = 1; d <= daysInMonth; d++) {
+        const x = PAD + NAME_W + GAP + (d - 1) * (CELL + GAP) + CELL / 2;
         const dayDate = new Date(year, month - 1, d);
-        const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' }).slice(0, 1).toUpperCase();
         const isWeekend = dayDate.getDay() === 0 || dayDate.getDay() === 6;
         const isFuture = d > daysToShow;
-        const cell = document.createElement('div');
-        cell.style.cssText = `
-          width: ${CELL_SIZE}px; min-width: ${CELL_SIZE}px;
-          text-align: center;
-          display: flex; flex-direction: column; align-items: center; gap: 1px;
-        `;
-        cell.innerHTML = `
-          <span style="font-size:9px;font-weight:800;color:${isFuture ? '#d1d5db' : isWeekend ? '#ea580c' : '#9ca3af'};">${d}</span>
-          <span style="font-size:7px;font-weight:600;color:${isFuture ? '#e5e7eb' : isWeekend ? '#f97316' : '#d1d5db'};letter-spacing:0.05em;">${dayName}</span>
-        `;
-        headerRow.appendChild(cell);
+        ctx.fillStyle = isFuture ? '#d4c5b0' : isWeekend ? '#c97040' : '#8b7355';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(d), x, HEADER_H - 22);
+        ctx.font = `9px 'Courier New', monospace`;
+        const dayName = dayDate.toLocaleDateString('es-ES', { weekday: 'short' }).slice(0, 1).toUpperCase();
+        ctx.fillText(dayName, x, HEADER_H - 10);
+        ctx.font = `bold 10px 'Courier New', monospace`;
       }
-      table.appendChild(headerRow);
 
       // Filas hábitos
-      activeHabits.forEach(habit => {
-        const tagData = userTags.find(t => t.name === habit.category);
-        const theme = getTagStyles(habit.category, tagData?.colorIndex);
-        const tagBgMap: Record<string, string> = {
-          'bg-gray-100': '#f3f4f6', 'bg-blue-100': '#eff6ff',
-          'bg-green-100': '#f0fdf4', 'bg-red-100': '#fff1f2',
-          'bg-yellow-100': '#fefce8', 'bg-purple-100': '#faf5ff'
-        };
-        const tagTextMap: Record<string, string> = {
-          'bg-gray-100': '#374151', 'bg-blue-100': '#1d4ed8',
-          'bg-green-100': '#15803d', 'bg-red-100': '#be123c',
-          'bg-yellow-100': '#a16207', 'bg-purple-100': '#7e22ce'
-        };
-        const tagBg = tagBgMap[theme.tag.split(' ')[0]] || '#f3f4f6';
-        const tagText = tagTextMap[theme.tag.split(' ')[0]] || '#374151';
+      activeHabits.forEach((habit, rowIdx) => {
+        const y = HEADER_H + rowIdx * ROW_H;
+        const cy = y + ROW_H / 2;
 
-        const row = document.createElement('div');
-        row.style.cssText = `display: flex; align-items: center; gap: ${CELL_GAP}px;`;
-
-        const nameCell = document.createElement('div');
-        nameCell.style.cssText = `
-          width: ${NAME_WIDTH}px; min-width: ${NAME_WIDTH}px;
-          padding: 7px 12px;
-          background: ${tagBg};
-          border-radius: 10px;
-          font-size: 11px; font-weight: 700;
-          color: ${tagText};
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          letter-spacing: -0.1px;
-        `;
-        nameCell.textContent = habit.name;
-        row.appendChild(nameCell);
-
-        for (let d = 1; d <= daysInMonth; d++) {
-          const status = getCellStatus(habit, d);
-          const styles: Record<string, {bg: string, symbol: string, color: string}> = {
-            success: { bg: '#bbf7d0', symbol: '·', color: '#15803d' },
-            failure: { bg: '#fecaca', symbol: '·', color: '#be123c' },
-            neutral: { bg: '#f3f4f6', symbol: '', color: 'transparent' },
-            future:  { bg: '#fafafa', symbol: '', color: 'transparent' },
-          };
-          const s = styles[status];
-          const cell = document.createElement('div');
-          cell.style.cssText = `
-            width: ${CELL_SIZE}px; min-width: ${CELL_SIZE}px; height: ${CELL_SIZE}px;
-            background: ${s.bg};
-            border-radius: 7px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 16px; font-weight: 900;
-            color: ${s.color};
-            line-height: 1;
-          `;
-          cell.textContent = s.symbol;
-          row.appendChild(cell);
+        // Nombre hábito
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#3d1f0e';
+        ctx.font = `13px 'Courier New', monospace`;
+        // Truncar nombre si es muy largo
+        let name = habit.name;
+        while (ctx.measureText(name).width > NAME_W - 8 && name.length > 0) {
+          name = name.slice(0, -1);
         }
-        table.appendChild(row);
+        if (name !== habit.name) name = name.slice(0, -1) + '…';
+        ctx.fillText(name, PAD, cy + 4);
+
+        // Celdas
+        for (let d = 1; d <= daysInMonth; d++) {
+          const cx = PAD + NAME_W + GAP + (d - 1) * (CELL + GAP) + CELL / 2;
+          const status = getCellStatus(habit, d);
+          const r = CELL * 0.36;
+
+          if (status === 'success') {
+            // Círculo verde relleno estilo pintado a mano
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fillStyle = '#5a9e6f';
+            ctx.fill();
+            // Borde ligeramente irregular
+            ctx.strokeStyle = '#3d7a52';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+          } else if (status === 'failure') {
+            // X roja estilo trazado a mano
+            ctx.strokeStyle = '#c94040';
+            ctx.lineWidth = 2.2;
+            ctx.lineCap = 'round';
+            const offset = r * 0.7;
+            ctx.beginPath();
+            ctx.moveTo(cx - offset, cy - offset);
+            ctx.lineTo(cx + offset, cy + offset);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(cx + offset, cy - offset);
+            ctx.lineTo(cx - offset, cy + offset);
+            ctx.stroke();
+          } else if (status === 'neutral') {
+            // Punto pequeño gris
+            ctx.beginPath();
+            ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#c8bfb0';
+            ctx.fill();
+          }
+          // future: nada
+        }
       });
 
-      container.appendChild(table);
-
       // Footer
-      const footer = document.createElement('div');
-      footer.style.cssText = 'margin-top: 28px; font-size: 9px; font-weight: 600; color: #d1d5db; letter-spacing: 0.1em; text-transform: uppercase;';
-      footer.textContent = `Generado el ${today.toLocaleDateString('es-ES')}`;
-      container.appendChild(footer);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#b8a898';
+      ctx.font = `10px 'Courier New', monospace`;
+      ctx.fillText(`generado el ${today.toLocaleDateString('es-ES')}`, PAD, totalHeight - PAD + 16);
 
-      document.body.appendChild(container);
-
+      // Descargar
       const fileName = `Habitos_${String(year).slice(-2)}${String(month).padStart(2,'0')}.png`;
+      const link = document.createElement('a');
+      link.download = fileName;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      setPanelFeedback({ type: 'success', message: `${fileName} exportado correctamente` });
 
-      const runCapture = () => {
-        (window as any).html2canvas(container, {
-          backgroundColor: '#fffcf0',
-          scale: 2,
-          useCORS: true,
-          width: container.scrollWidth,
-          height: container.scrollHeight,
-          windowWidth: container.scrollWidth,
-          windowHeight: container.scrollHeight,
-          scrollX: 0, scrollY: 0,
-          logging: false
-        }).then((canvas: HTMLCanvasElement) => {
-          document.body.removeChild(container);
-          const link = document.createElement('a');
-          link.download = fileName;
-          link.href = canvas.toDataURL('image/png');
-          link.click();
-          setPanelFeedback({ type: 'success', message: `${fileName} exportado correctamente` });
-        }).catch((err: any) => {
-          document.body.removeChild(container);
-          setPanelFeedback({ type: 'error', message: err.message || "Error al generar la imagen" });
-        });
-      };
-
-      if (!(window as any).html2canvas) {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-        script.onload = runCapture;
-        script.onerror = () => {
-          document.body.removeChild(container);
-          setPanelFeedback({ type: 'error', message: "Error al cargar la librería de captura" });
-        };
-        document.head.appendChild(script);
-      } else {
-        runCapture();
-      }
     } catch (error: any) {
       setPanelFeedback({ type: 'error', message: error.message || "Error al generar la imagen" });
     }
