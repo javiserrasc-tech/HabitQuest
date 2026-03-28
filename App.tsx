@@ -620,7 +620,6 @@ const App: React.FC = () => {
         ctx.textAlign = 'left';
         ctx.fillStyle = '#3d1f0e';
         ctx.font = `13px 'Courier New', monospace`;
-        // Truncar nombre si es muy largo
         let name = habit.name;
         while (ctx.measureText(name).width > NAME_W - 8 && name.length > 0) {
           name = name.slice(0, -1);
@@ -628,44 +627,113 @@ const App: React.FC = () => {
         if (name !== habit.name) name = name.slice(0, -1) + '…';
         ctx.fillText(name, PAD, cy + 4);
 
+        // Color del hábito para el fondo de celdas
+        const tagData = userTags.find(t => t.name === habit.category);
+        const theme = getTagStyles(habit.category, tagData?.colorIndex);
+        const tagBgMap: Record<string, string> = {
+          'bg-gray-100': '#e8e8e8', 'bg-blue-100': '#c8d8f0',
+          'bg-green-100': '#b8e0c8', 'bg-red-100': '#f0c0c0',
+          'bg-yellow-100': '#f0e0a0', 'bg-purple-100': '#d8c0f0'
+        };
+        const cellBg = tagBgMap[theme.tag.split(' ')[0]] || '#e8e8e8';
+
         // Celdas
         for (let d = 1; d <= daysInMonth; d++) {
           const cx = PAD + NAME_W + GAP + (d - 1) * (CELL + GAP) + CELL / 2;
           const status = getCellStatus(habit, d);
           const r = CELL * 0.36;
 
+          // Fondo de celda con color del hábito estilo lápiz (solo si no es futuro)
+          if (status !== 'future') {
+            // Simular trazo de lápiz con varias pasadas semitransparentes
+            ctx.globalAlpha = 0.18;
+            ctx.fillStyle = cellBg;
+            const bx = cx - CELL / 2 + 2;
+            const by = y + 3;
+            const bw = CELL - 4;
+            const bh = ROW_H - 6;
+            // Pasadas irregulares estilo lápiz
+            for (let pass = 0; pass < 3; pass++) {
+              ctx.beginPath();
+              const ox = (Math.random() - 0.5) * 1.5;
+              const oy = (Math.random() - 0.5) * 1.5;
+              ctx.roundRect(bx + ox, by + oy, bw, bh, 3);
+              ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+          }
+
           if (status === 'success') {
-            // Círculo verde relleno estilo pintado a mano
+            // Círculo irregular estilo trazado a mano
+            ctx.strokeStyle = '#2d7a4a';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // Dibujar un círculo imperfecto con bezier curves
+            const jitter = () => (Math.random() - 0.5) * 2.5;
             ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.fillStyle = '#5a9e6f';
-            ctx.fill();
-            // Borde ligeramente irregular
-            ctx.strokeStyle = '#3d7a52';
-            ctx.lineWidth = 1.2;
+            ctx.moveTo(cx + r + jitter(), cy + jitter());
+            ctx.bezierCurveTo(
+              cx + r + jitter(), cy - r * 0.6 + jitter(),
+              cx + r * 0.6 + jitter(), cy - r + jitter(),
+              cx + jitter(), cy - r + jitter()
+            );
+            ctx.bezierCurveTo(
+              cx - r * 0.6 + jitter(), cy - r + jitter(),
+              cx - r + jitter(), cy - r * 0.6 + jitter(),
+              cx - r + jitter(), cy + jitter()
+            );
+            ctx.bezierCurveTo(
+              cx - r + jitter(), cy + r * 0.6 + jitter(),
+              cx - r * 0.6 + jitter(), cy + r + jitter(),
+              cx + jitter(), cy + r + jitter()
+            );
+            ctx.bezierCurveTo(
+              cx + r * 0.6 + jitter(), cy + r + jitter(),
+              cx + r + jitter(), cy + r * 0.6 + jitter(),
+              cx + r + jitter(), cy + jitter()
+            );
             ctx.stroke();
+
+            // Relleno semitransparente
+            ctx.globalAlpha = 0.25;
+            ctx.fillStyle = '#2d7a4a';
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
           } else if (status === 'failure') {
-            // X roja estilo trazado a mano
-            ctx.strokeStyle = '#c94040';
+            // X irregular estilo trazado a mano
+            ctx.strokeStyle = '#b03030';
             ctx.lineWidth = 2.2;
             ctx.lineCap = 'round';
-            const offset = r * 0.7;
+            const jitter = () => (Math.random() - 0.5) * 2.5;
+            const off = r * 0.72;
+
+            // Primera línea de la X
             ctx.beginPath();
-            ctx.moveTo(cx - offset, cy - offset);
-            ctx.lineTo(cx + offset, cy + offset);
+            ctx.moveTo(cx - off + jitter(), cy - off + jitter());
+            ctx.quadraticCurveTo(
+              cx + jitter(), cy + jitter(),
+              cx + off + jitter(), cy + off + jitter()
+            );
             ctx.stroke();
+
+            // Segunda línea de la X
             ctx.beginPath();
-            ctx.moveTo(cx + offset, cy - offset);
-            ctx.lineTo(cx - offset, cy + offset);
+            ctx.moveTo(cx + off + jitter(), cy - off + jitter());
+            ctx.quadraticCurveTo(
+              cx + jitter(), cy + jitter(),
+              cx - off + jitter(), cy + off + jitter()
+            );
             ctx.stroke();
+
           } else if (status === 'neutral') {
-            // Punto pequeño gris
             ctx.beginPath();
             ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
-            ctx.fillStyle = '#c8bfb0';
+            ctx.fillStyle = '#b8a898';
             ctx.fill();
           }
-          // future: nada
         }
       });
 
