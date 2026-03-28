@@ -538,35 +538,36 @@ const App: React.FC = () => {
         }
       };
 
-      // Construir el elemento visual en el DOM temporalmente
+      const CELL_SIZE = 28;
+      const CELL_GAP = 3;
+      const NAME_WIDTH = 200;
+      const totalWidth = NAME_WIDTH + (CELL_SIZE + CELL_GAP) * daysInMonth + 64;
+
       const container = document.createElement('div');
       container.style.cssText = `
         position: fixed; left: -9999px; top: 0;
-        background: #fffcf0; padding: 32px;
-        font-family: 'Quicksand', sans-serif;
-        width: ${Math.max(900, daysInMonth * 28 + 220)}px;
+        background: #fffcf0;
+        padding: 40px 32px 48px 32px;
+        font-family: 'Quicksand', -apple-system, BlinkMacSystemFont, sans-serif;
+        width: ${totalWidth}px;
+        box-sizing: border-box;
       `;
 
       // Cabecera
       const header = document.createElement('div');
-      header.style.cssText = 'margin-bottom: 20px; display: flex; align-items: baseline; gap: 12px;';
+      header.style.cssText = 'margin-bottom: 28px;';
       header.innerHTML = `
-        <span style="font-size:22px;font-weight:900;color:#431407;text-transform:capitalize;">HabitQuest</span>
-        <span style="font-size:14px;font-weight:700;color:#9a3412;text-transform:capitalize;opacity:0.6;">${monthName}</span>
+        <div style="font-size:11px;font-weight:700;color:#c2410c;letter-spacing:0.15em;text-transform:uppercase;opacity:0.5;margin-bottom:4px;">HabitQuest</div>
+        <div style="font-size:26px;font-weight:800;color:#431407;text-transform:capitalize;letter-spacing:-0.5px;">${monthName}</div>
       `;
       container.appendChild(header);
 
-      // Tabla
       const table = document.createElement('div');
-      table.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+      table.style.cssText = 'display: flex; flex-direction: column; gap: 5px;';
 
-      // Fila de cabecera con días
+      // Fila cabecera días
       const headerRow = document.createElement('div');
-      headerRow.style.cssText = 'display: flex; gap: 3px; align-items: center; margin-bottom: 4px;';
-      const habitHeaderCell = document.createElement('div');
-      habitHeaderCell.style.cssText = 'width: 180px; min-width: 180px; font-size: 9px; font-weight: 900; color: #9a3412; opacity: 0.4; text-transform: uppercase; padding: 0 8px;';
-      habitHeaderCell.textContent = 'Hábito';
-      headerRow.appendChild(habitHeaderCell);
+      headerRow.style.cssText = `display: flex; align-items: center; gap: ${CELL_GAP}px; margin-bottom: 6px; padding-left: ${NAME_WIDTH + CELL_GAP}px;`;
 
       for (let d = 1; d <= daysInMonth; d++) {
         const dayDate = new Date(year, month - 1, d);
@@ -575,59 +576,85 @@ const App: React.FC = () => {
         const isFuture = d > daysToShow;
         const cell = document.createElement('div');
         cell.style.cssText = `
-          width: 26px; min-width: 26px; text-align: center;
-          font-size: 8px; font-weight: 900;
-          color: ${isFuture ? '#d1d5db' : isWeekend ? '#ea580c' : '#6b7280'};
+          width: ${CELL_SIZE}px; min-width: ${CELL_SIZE}px;
+          text-align: center;
           display: flex; flex-direction: column; align-items: center; gap: 1px;
         `;
-        cell.innerHTML = `<span>${d}</span><span style="font-size:7px;opacity:0.6;">${dayName}</span>`;
+        cell.innerHTML = `
+          <span style="font-size:9px;font-weight:800;color:${isFuture ? '#d1d5db' : isWeekend ? '#ea580c' : '#9ca3af'};">${d}</span>
+          <span style="font-size:7px;font-weight:600;color:${isFuture ? '#e5e7eb' : isWeekend ? '#f97316' : '#d1d5db'};letter-spacing:0.05em;">${dayName}</span>
+        `;
         headerRow.appendChild(cell);
       }
       table.appendChild(headerRow);
 
-      // Filas de hábitos
+      // Filas hábitos
       activeHabits.forEach(habit => {
         const tagData = userTags.find(t => t.name === habit.category);
         const theme = getTagStyles(habit.category, tagData?.colorIndex);
         const tagBgMap: Record<string, string> = {
-          'bg-gray-100': '#f3f4f6', 'bg-blue-100': '#dbeafe',
-          'bg-green-100': '#dcfce7', 'bg-red-100': '#fee2e2',
-          'bg-yellow-100': '#fef9c3', 'bg-purple-100': '#f3e8ff'
+          'bg-gray-100': '#f3f4f6', 'bg-blue-100': '#eff6ff',
+          'bg-green-100': '#f0fdf4', 'bg-red-100': '#fff1f2',
+          'bg-yellow-100': '#fefce8', 'bg-purple-100': '#faf5ff'
+        };
+        const tagTextMap: Record<string, string> = {
+          'bg-gray-100': '#374151', 'bg-blue-100': '#1d4ed8',
+          'bg-green-100': '#15803d', 'bg-red-100': '#be123c',
+          'bg-yellow-100': '#a16207', 'bg-purple-100': '#7e22ce'
         };
         const tagBg = tagBgMap[theme.tag.split(' ')[0]] || '#f3f4f6';
+        const tagText = tagTextMap[theme.tag.split(' ')[0]] || '#374151';
 
         const row = document.createElement('div');
-        row.style.cssText = 'display: flex; gap: 3px; align-items: center;';
+        row.style.cssText = `display: flex; align-items: center; gap: ${CELL_GAP}px;`;
 
         const nameCell = document.createElement('div');
         nameCell.style.cssText = `
-          width: 180px; min-width: 180px; padding: 6px 10px;
-          background: ${tagBg}; border-radius: 8px;
-          font-size: 10px; font-weight: 700; color: #431407;
+          width: ${NAME_WIDTH}px; min-width: ${NAME_WIDTH}px;
+          padding: 7px 12px;
+          background: ${tagBg};
+          border-radius: 10px;
+          font-size: 11px; font-weight: 700;
+          color: ${tagText};
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          letter-spacing: -0.1px;
         `;
         nameCell.textContent = habit.name;
         row.appendChild(nameCell);
 
         for (let d = 1; d <= daysInMonth; d++) {
           const status = getCellStatus(habit, d);
-          const bgColor = status === 'success' ? '#16a34a' : status === 'failure' ? '#dc2626' : status === 'future' ? '#f9fafb' : '#e5e7eb';
-          const symbol = status === 'success' ? '✓' : status === 'failure' ? '✗' : '';
+          const styles: Record<string, {bg: string, symbol: string, color: string}> = {
+            success: { bg: '#bbf7d0', symbol: '·', color: '#15803d' },
+            failure: { bg: '#fecaca', symbol: '·', color: '#be123c' },
+            neutral: { bg: '#f3f4f6', symbol: '', color: 'transparent' },
+            future:  { bg: '#fafafa', symbol: '', color: 'transparent' },
+          };
+          const s = styles[status];
           const cell = document.createElement('div');
           cell.style.cssText = `
-            width: 26px; min-width: 26px; height: 26px;
-            background: ${bgColor}; border-radius: 6px;
+            width: ${CELL_SIZE}px; min-width: ${CELL_SIZE}px; height: ${CELL_SIZE}px;
+            background: ${s.bg};
+            border-radius: 7px;
             display: flex; align-items: center; justify-content: center;
-            font-size: 11px; font-weight: 900;
-            color: white;
+            font-size: 16px; font-weight: 900;
+            color: ${s.color};
+            line-height: 1;
           `;
-          cell.textContent = symbol;
+          cell.textContent = s.symbol;
           row.appendChild(cell);
         }
         table.appendChild(row);
       });
 
       container.appendChild(table);
+
+      // Footer
+      const footer = document.createElement('div');
+      footer.style.cssText = 'margin-top: 28px; font-size: 9px; font-weight: 600; color: #d1d5db; letter-spacing: 0.1em; text-transform: uppercase;';
+      footer.textContent = `Generado el ${today.toLocaleDateString('es-ES')}`;
+      container.appendChild(footer);
+
       document.body.appendChild(container);
 
       const fileName = `Habitos_${String(year).slice(-2)}${String(month).padStart(2,'0')}.png`;
@@ -649,7 +676,7 @@ const App: React.FC = () => {
           link.download = fileName;
           link.href = canvas.toDataURL('image/png');
           link.click();
-          setPanelFeedback({ type: 'success', message: `Imagen ${fileName} exportada correctamente` });
+          setPanelFeedback({ type: 'success', message: `${fileName} exportado correctamente` });
         }).catch((err: any) => {
           document.body.removeChild(container);
           setPanelFeedback({ type: 'error', message: err.message || "Error al generar la imagen" });
