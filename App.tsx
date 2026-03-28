@@ -653,7 +653,6 @@ const App: React.FC = () => {
         for (let d = 1; d <= daysInMonth; d++) {
           const cx = PAD + NAME_W + GAP + (d - 1) * (CELL + GAP) + CELL / 2;
           const status = getCellStatus(habit, d);
-          const r = CELL * 0.36;
 
           // Fondo de celda con color del hábito estilo lápiz (solo si no es futuro)
           if (status !== 'future') {
@@ -676,69 +675,54 @@ const App: React.FC = () => {
           }
 
           if (status === 'success') {
-            // Círculo irregular estilo trazado a mano
+            // Rayas diagonales verdes estilo trazado a mano
             ctx.strokeStyle = '#2d7a4a';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.8;
             ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-
-            // Dibujar un círculo imperfecto con bezier curves
-            const jitter = () => (Math.random() - 0.5) * 2.5;
-            ctx.beginPath();
-            ctx.moveTo(cx + r + jitter(), cy + jitter());
-            ctx.bezierCurveTo(
-              cx + r + jitter(), cy - r * 0.6 + jitter(),
-              cx + r * 0.6 + jitter(), cy - r + jitter(),
-              cx + jitter(), cy - r + jitter()
-            );
-            ctx.bezierCurveTo(
-              cx - r * 0.6 + jitter(), cy - r + jitter(),
-              cx - r + jitter(), cy - r * 0.6 + jitter(),
-              cx - r + jitter(), cy + jitter()
-            );
-            ctx.bezierCurveTo(
-              cx - r + jitter(), cy + r * 0.6 + jitter(),
-              cx - r * 0.6 + jitter(), cy + r + jitter(),
-              cx + jitter(), cy + r + jitter()
-            );
-            ctx.bezierCurveTo(
-              cx + r * 0.6 + jitter(), cy + r + jitter(),
-              cx + r + jitter(), cy + r * 0.6 + jitter(),
-              cx + r + jitter(), cy + jitter()
-            );
-            ctx.stroke();
-
-            // Relleno semitransparente
-            ctx.globalAlpha = 0.25;
-            ctx.fillStyle = '#2d7a4a';
-            ctx.fill();
-            ctx.globalAlpha = 1;
+            const x0 = cx - CELL / 2 + 3;
+            const x1 = cx + CELL / 2 - 3;
+            const y0 = y + 3;
+            const y1 = y + ROW_H - 3;
+            const step = 4.5;
+            const jitter = () => (Math.random() - 0.5) * 1.8;
+            for (let s = -CELL; s < CELL * 1.5; s += step) {
+              const ax = x0 + s;
+              const bx = x0 + s + (y1 - y0);
+              const clampAx = Math.max(x0, Math.min(x1, ax));
+              const clampBx = Math.max(x0, Math.min(x1, bx));
+              const clampAy = ax < x0 ? y0 + (x0 - ax) : y0;
+              const clampBy = bx > x1 ? y1 - (bx - x1) : y1;
+              if (clampAx >= x1 || clampBx <= x0) continue;
+              ctx.beginPath();
+              ctx.moveTo(clampAx + jitter(), clampAy + jitter());
+              ctx.lineTo(clampBx + jitter(), clampBy + jitter());
+              ctx.stroke();
+            }
 
           } else if (status === 'failure') {
-            // X roja más grande estilo trazado a mano
+            // Rayas diagonales rojas en dirección contraria estilo trazado a mano
             ctx.strokeStyle = '#b03030';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 1.8;
             ctx.lineCap = 'round';
-            const jitter = () => (Math.random() - 0.5) * 2.5;
-            const off = r * 0.95;
-
-            // Primera línea de la X
-            ctx.beginPath();
-            ctx.moveTo(cx - off + jitter(), cy - off + jitter());
-            ctx.quadraticCurveTo(
-              cx + jitter(), cy + jitter(),
-              cx + off + jitter(), cy + off + jitter()
-            );
-            ctx.stroke();
-
-            // Segunda línea de la X
-            ctx.beginPath();
-            ctx.moveTo(cx + off + jitter(), cy - off + jitter());
-            ctx.quadraticCurveTo(
-              cx + jitter(), cy + jitter(),
-              cx - off + jitter(), cy + off + jitter()
-            );
-            ctx.stroke();
+            const x0 = cx - CELL / 2 + 3;
+            const x1 = cx + CELL / 2 - 3;
+            const y0 = y + 3;
+            const y1 = y + ROW_H - 3;
+            const step = 4.5;
+            const jitter = () => (Math.random() - 0.5) * 1.8;
+            for (let s = -CELL; s < CELL * 1.5; s += step) {
+              const ax = x1 - s;
+              const bx = x1 - s - (y1 - y0);
+              const clampAx = Math.max(x0, Math.min(x1, ax));
+              const clampBx = Math.max(x0, Math.min(x1, bx));
+              const clampAy = ax > x1 ? y0 + (ax - x1) : y0;
+              const clampBy = bx < x0 ? y1 - (x0 - bx) : y1;
+              if (clampAx <= x0 || clampBx >= x1) continue;
+              ctx.beginPath();
+              ctx.moveTo(clampAx + jitter(), clampAy + jitter());
+              ctx.lineTo(clampBx + jitter(), clampBy + jitter());
+              ctx.stroke();
+            }
 
           } else if (status === 'neutral') {
             ctx.beginPath();
