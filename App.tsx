@@ -616,6 +616,18 @@ const App: React.FC = () => {
         const y = HEADER_H + rowIdx * ROW_H;
         const cy = y + ROW_H / 2;
 
+        // Fondo de color en el nombre del hábito estilo lápiz
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = cellBg;
+        for (let pass = 0; pass < 3; pass++) {
+          ctx.beginPath();
+          const ox = (Math.random() - 0.5) * 1.5;
+          const oy = (Math.random() - 0.5) * 1.5;
+          ctx.roundRect(PAD + ox, y + 3 + oy, NAME_W - 4, ROW_H - 6, 3);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
         // Nombre hábito
         ctx.textAlign = 'left';
         ctx.fillStyle = '#3d1f0e';
@@ -625,7 +637,7 @@ const App: React.FC = () => {
           name = name.slice(0, -1);
         }
         if (name !== habit.name) name = name.slice(0, -1) + '…';
-        ctx.fillText(name, PAD, cy + 4);
+        ctx.fillText(name, PAD + 6, cy + 4);
 
         // Color del hábito para el fondo de celdas
         const tagData = userTags.find(t => t.name === habit.category);
@@ -703,12 +715,12 @@ const App: React.FC = () => {
             ctx.globalAlpha = 1;
 
           } else if (status === 'failure') {
-            // X irregular estilo trazado a mano
+            // X roja más grande estilo trazado a mano
             ctx.strokeStyle = '#b03030';
-            ctx.lineWidth = 2.2;
+            ctx.lineWidth = 3;
             ctx.lineCap = 'round';
             const jitter = () => (Math.random() - 0.5) * 2.5;
-            const off = r * 0.72;
+            const off = r * 0.95;
 
             // Primera línea de la X
             ctx.beginPath();
