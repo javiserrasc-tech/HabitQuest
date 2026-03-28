@@ -616,6 +616,16 @@ const App: React.FC = () => {
         const y = HEADER_H + rowIdx * ROW_H;
         const cy = y + ROW_H / 2;
 
+        // Color del hábito para fondos
+        const tagData = userTags.find(t => t.name === habit.category);
+        const theme = getTagStyles(habit.category, tagData?.colorIndex);
+        const tagBgMap: Record<string, string> = {
+          'bg-gray-100': '#e8e8e8', 'bg-blue-100': '#c8d8f0',
+          'bg-green-100': '#b8e0c8', 'bg-red-100': '#f0c0c0',
+          'bg-yellow-100': '#f0e0a0', 'bg-purple-100': '#d8c0f0'
+        };
+        const cellBg = tagBgMap[theme.tag.split(' ')[0]] || '#e8e8e8';
+
         // Fondo de color en el nombre del hábito estilo lápiz
         ctx.globalAlpha = 0.22;
         ctx.fillStyle = cellBg;
@@ -638,16 +648,6 @@ const App: React.FC = () => {
         }
         if (name !== habit.name) name = name.slice(0, -1) + '…';
         ctx.fillText(name, PAD + 6, cy + 4);
-
-        // Color del hábito para el fondo de celdas
-        const tagData = userTags.find(t => t.name === habit.category);
-        const theme = getTagStyles(habit.category, tagData?.colorIndex);
-        const tagBgMap: Record<string, string> = {
-          'bg-gray-100': '#e8e8e8', 'bg-blue-100': '#c8d8f0',
-          'bg-green-100': '#b8e0c8', 'bg-red-100': '#f0c0c0',
-          'bg-yellow-100': '#f0e0a0', 'bg-purple-100': '#d8c0f0'
-        };
-        const cellBg = tagBgMap[theme.tag.split(' ')[0]] || '#e8e8e8';
 
         // Celdas
         for (let d = 1; d <= daysInMonth; d++) {
