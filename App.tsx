@@ -790,7 +790,12 @@ const App: React.FC = () => {
               </p>
             </header>
             <section className="space-y-4">
-              {habits.filter(h => showArchived || !h.archived).map((h, idx) => {
+              {(() => {
+                const visibleHabits = habits.filter(h => showArchived || !h.archived);
+                return visibleHabits.map((h, filteredIdx) => {
+                const realIdx = habits.indexOf(h);
+                const prevRealIdx = filteredIdx > 0 ? habits.indexOf(visibleHabits[filteredIdx - 1]) : -1;
+                const nextRealIdx = filteredIdx < visibleHabits.length - 1 ? habits.indexOf(visibleHabits[filteredIdx + 1]) : -1;
                 const curWeek = calculateRateInRange(h, weekDates.sunThisWeek, new Date());
                 const prevWeek = calculateRateInRange(h, weekDates.sunLastWeek, weekDates.satLastWeek);
 
@@ -801,13 +806,26 @@ const App: React.FC = () => {
                     onEdit={(h) => { setEditingHabit({...h}); setIsEditModalOpen(true); }}
                     onLogPast={(h) => { setSelectedHabitForPastDate(h); setIsPastDateModalOpen(true); }}
                     onArchive={handleArchiveHabit}
-                    isReorderMode={isReorderMode} isFirst={idx === 0} isLast={idx === habits.length - 1}
-                    onMoveUp={() => { const n = [...habits]; [n[idx], n[idx-1]] = [n[idx-1], n[idx]]; setHabits(n); }}
-                    onMoveDown={() => { const n = [...habits]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; setHabits(n); }}
+                    isReorderMode={isReorderMode}
+                    isFirst={filteredIdx === 0}
+                    isLast={filteredIdx === visibleHabits.length - 1}
+                    onMoveUp={() => {
+                      if (prevRealIdx === -1) return;
+                      const n = [...habits];
+                      [n[realIdx], n[prevRealIdx]] = [n[prevRealIdx], n[realIdx]];
+                      setHabits(n);
+                    }}
+                    onMoveDown={() => {
+                      if (nextRealIdx === -1) return;
+                      const n = [...habits];
+                      [n[realIdx], n[nextRealIdx]] = [n[nextRealIdx], n[realIdx]];
+                      setHabits(n);
+                    }}
                     curWeek={curWeek} prevWeek={prevWeek}
                   />
                 );
-              })}
+              });
+              })()}
               {habits.length === 0 && <div className="text-center py-20 opacity-30 italic">Crea un hábito con el botón +</div>}
             </section>
           </div>
