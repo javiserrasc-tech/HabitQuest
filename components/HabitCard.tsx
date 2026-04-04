@@ -6,11 +6,13 @@ interface HabitCardProps {
   habit: Habit;
   userTags: UserTag[];
   onToggle: (id: number) => void;
+  onNumericLog: (id: number, value: number) => void;
   onDelete: (id: number) => void;
   onLogPast: (habit: Habit) => void;
   onEdit: (habit: Habit) => void;
   onArchive: (id: number) => void;
   status: HabitStatus;
+  todayNumericValue?: number;
   isReorderMode?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
@@ -18,18 +20,39 @@ interface HabitCardProps {
   isLast?: boolean;
   curWeek?: number;
   prevWeek?: number;
+  selectedDate: string;
 }
 
 const HabitCard: React.FC<HabitCardProps> = ({ 
-  habit, userTags, onToggle, onDelete, onLogPast, onEdit, onArchive, status, isReorderMode, onMoveUp, onMoveDown, isFirst, isLast, curWeek, prevWeek
+  habit, userTags, onToggle, onNumericLog, onDelete, onLogPast, onEdit, onArchive,
+  status, todayNumericValue, isReorderMode, onMoveUp, onMoveDown, isFirst, isLast,
+  curWeek, prevWeek, selectedDate
 }) => {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
+  const [numericInput, setNumericInput] = useState<string>(
+    todayNumericValue !== undefined ? String(todayNumericValue) : ''
+  );
   const timerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
 
+  // Sync input when date changes
+  useEffect(() => {
+    setNumericInput(todayNumericValue !== undefined ? String(todayNumericValue) : '');
+  }, [todayNumericValue, selectedDate]);
+
   const tagData = userTags.find(t => t.name === habit.category);
   const theme = getTagStyles(habit.category, tagData?.colorIndex);
+
+  const isNumeric = habit.habitType === 'numeric';
+
+  // For numeric: green if value is good vs goal
+  const numericIsGood = (val: number) => {
+    if (habit.numericGoal === undefined) return null;
+    return habit.numericDirection === 'max' ? val >= habit.numericGoal : val <= habit.numericGoal;
+  };
+
+  const numericStatus = todayNumericValue !== undefined ? numericIsGood(todayNumericValue) : null;
 
   const startDeleteTimer = () => {
     startTimeRef.current = Date.now(); setDeleteProgress(0);
@@ -41,12 +64,13 @@ const HabitCard: React.FC<HabitCardProps> = ({
     }, 50);
   };
 
-  const stopDeleteTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } setDeleteProgress(0); };
+  const stopDeleteTimer = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setDeleteProgress(0);
+  };
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
   if (isConfirmingDelete) {
@@ -66,9 +90,19 @@ const HabitCard: React.FC<HabitCardProps> = ({
     );
   }
 
+  // Card border color
+  const cardBorder = isNumeric
+    ? numericStatus === true ? 'bg-emerald-50/20 border-emerald-100'
+      : numericStatus === false ? 'bg-rose-50/20 border-rose-100'
+      : theme.card + ' border-transparent'
+    : status === 'success' ? 'bg-emerald-50/20 border-emerald-100'
+      : status === 'failure' ? 'bg-rose-50/20 border-rose-100'
+      : theme.card + ' border-transparent';
+
   return (
-    <div className={`relative rounded-[32px] p-5 shadow-sm border-2 transition-all duration-300 ${status === 'success' ? 'bg-emerald-50/20 border-emerald-100' : status === 'failure' ? 'bg-rose-50/20 border-rose-100' : theme.card + ' border-transparent'}`}>
+    <div className={`relative rounded-[32px] p-5 shadow-sm border-2 transition-all duration-300 ${cardBorder}`}>
       <div className="flex flex-col gap-4">
+        {/* Top row: tags + actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             <span className="text-[9px] font-black text-black/20 bg-black/5 px-2 py-0.5 rounded-md">#{habit.id}</span>
@@ -76,7 +110,12 @@ const HabitCard: React.FC<HabitCardProps> = ({
             <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border border-black/5 bg-black/5 text-black/40 shrink-0">
               {habit.frequency === 'daily' ? 'Diario' : habit.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
             </span>
-            {habit.streak > 0 && <span className="text-[9px] font-bold text-orange-600">🔥 {habit.streak}</span>}
+            {isNumeric && (
+              <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg border shrink-0 ${habit.numericDirection === 'max' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-blue-50 border-blue-100 text-blue-700'}`}>
+                {habit.numericDirection === 'max' ? '↑' : '↓'} {habit.numericGoal}
+              </span>
+            )}
+            {!isNumeric && habit.streak > 0 && <span className="text-[9px] font-bold text-orange-600">🔥 {habit.streak}</span>}
           </div>
           <div className="flex items-center">
             {isReorderMode ? (
@@ -86,7 +125,7 @@ const HabitCard: React.FC<HabitCardProps> = ({
               </div>
             ) : (
               <div className="flex">
-                <button onClick={() => onArchive(habit.id)} className={`p-1.5 transition-colors ${habit.archived ? 'text-orange-600' : 'text-black/10 hover:text-black/40'}`} title={habit.archived ? "Desarchivar" : "Archivar"}><Icons.Archive /></button>
+                <button onClick={() => onArchive(habit.id)} className={`p-1.5 transition-colors ${habit.archived ? 'text-orange-600' : 'text-black/10 hover:text-black/40'}`}><Icons.Archive /></button>
                 <button onClick={() => onEdit(habit)} className="p-1.5 text-black/10 hover:text-black/40"><Icons.Edit /></button>
                 <button onClick={() => onLogPast(habit)} className="p-1.5 text-black/10 hover:text-black/40"><Icons.Calendar /></button>
                 <button onClick={() => setIsConfirmingDelete(true)} className="p-1.5 text-black/10 hover:text-rose-500"><Icons.Trash /></button>
@@ -94,23 +133,80 @@ const HabitCard: React.FC<HabitCardProps> = ({
             )}
           </div>
         </div>
+
+        {/* Main row: toggle/input + name */}
         <div className="flex items-center gap-4">
-          <button disabled={isReorderMode} onClick={() => onToggle(habit.id)} className={`w-11 h-11 shrink-0 rounded-2xl flex items-center justify-center transition-all border-2 active:scale-90 ${status === 'success' ? 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200/50 shadow-md' : status === 'failure' ? 'bg-rose-600 border-rose-600 text-white shadow-rose-200/50 shadow-md' : 'bg-white text-orange-200 border-orange-100'}`}>
-            {status === 'success' ? <Icons.Check /> : status === 'failure' ? <Icons.X /> : <div className="w-4 h-4 rounded-full border-2 border-current opacity-20" />}
-          </button>
+          {isNumeric ? (
+            <div className="flex flex-col items-center gap-1 shrink-0">
+              <input
+                type="number"
+                value={numericInput}
+                onChange={e => setNumericInput(e.target.value)}
+                onBlur={() => {
+                  const val = parseFloat(numericInput);
+                  if (!isNaN(val)) onNumericLog(habit.id, val);
+                }}
+                disabled={isReorderMode}
+                placeholder="—"
+                className={`w-16 h-11 text-center font-black text-sm rounded-2xl border-2 outline-none transition-all
+                  ${numericStatus === true ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                    : numericStatus === false ? 'bg-rose-50 border-rose-300 text-rose-700'
+                    : 'bg-white border-orange-100 text-orange-950'}
+                `}
+              />
+            </div>
+          ) : (
+            <button
+              disabled={isReorderMode}
+              onClick={() => onToggle(habit.id)}
+              className={`w-11 h-11 shrink-0 rounded-2xl flex items-center justify-center transition-all border-2 active:scale-90
+                ${status === 'success' ? 'bg-emerald-600 border-emerald-600 text-white shadow-emerald-200/50 shadow-md'
+                  : status === 'failure' ? 'bg-rose-600 border-rose-600 text-white shadow-rose-200/50 shadow-md'
+                  : 'bg-white text-orange-200 border-orange-100'}`}
+            >
+              {status === 'success' ? <Icons.Check /> : status === 'failure' ? <Icons.X /> : <div className="w-4 h-4 rounded-full border-2 border-current opacity-20" />}
+            </button>
+          )}
+
           <div className="flex-1 min-w-0">
-            <h3 className={`font-bold text-orange-950 text-lg leading-tight transition-all break-words ${status === 'success' ? 'opacity-40' : ''}`}>{habit.name}</h3>
+            <h3 className={`font-bold text-orange-950 text-lg leading-tight transition-all break-words ${!isNumeric && status === 'success' ? 'opacity-40' : ''}`}>
+              {habit.name}
+            </h3>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[10px] font-black uppercase opacity-40">Semana: {curWeek}%</span>
-              {prevWeek !== undefined && curWeek !== undefined && (
-                <span className={`text-[10px] font-black uppercase ${curWeek >= prevWeek ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  vs {prevWeek}%
-                </span>
-              )}
-              {habit.reference !== undefined && curWeek !== undefined && (
-                <span className={`text-[10px] font-black uppercase ${curWeek >= habit.reference ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  obj {habit.reference}%
-                </span>
+              {isNumeric ? (
+                <>
+                  <span className="text-[10px] font-black uppercase opacity-40">
+                    Sem: {curWeek !== undefined ? curWeek.toFixed(1) : '—'}
+                  </span>
+                  {prevWeek !== undefined && curWeek !== undefined && (
+                    <span className={`text-[10px] font-black uppercase ${
+                      habit.numericDirection === 'max'
+                        ? curWeek >= prevWeek ? 'text-emerald-600' : 'text-rose-600'
+                        : curWeek <= prevWeek ? 'text-emerald-600' : 'text-rose-600'
+                    }`}>vs {prevWeek.toFixed(1)}</span>
+                  )}
+                  {habit.numericGoal !== undefined && curWeek !== undefined && (
+                    <span className={`text-[10px] font-black uppercase ${
+                      habit.numericDirection === 'max'
+                        ? curWeek >= habit.numericGoal ? 'text-emerald-600' : 'text-rose-600'
+                        : curWeek <= habit.numericGoal ? 'text-emerald-600' : 'text-rose-600'
+                    }`}>obj {habit.numericGoal}</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="text-[10px] font-black uppercase opacity-40">Semana: {curWeek}%</span>
+                  {prevWeek !== undefined && curWeek !== undefined && (
+                    <span className={`text-[10px] font-black uppercase ${curWeek >= prevWeek ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      vs {prevWeek}%
+                    </span>
+                  )}
+                  {habit.reference !== undefined && curWeek !== undefined && (
+                    <span className={`text-[10px] font-black uppercase ${curWeek >= habit.reference ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      obj {habit.reference}%
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
