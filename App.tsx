@@ -68,6 +68,9 @@ const App: React.FC = () => {
   const [selectedTagName, setSelectedTagName] = useState(DEFAULT_TAG.name);
   const [newFreq, setNewFreq] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [newReference, setNewReference] = useState<string>('');
+  const [newHabitType, setNewHabitType] = useState<'boolean' | 'numeric'>('boolean');
+  const [newNumericGoal, setNewNumericGoal] = useState<string>('');
+  const [newNumericDirection, setNewNumericDirection] = useState<'min' | 'max'>('min');
   const [importFile, setImportFile] = useState<File | null>(null);
   const [configImportFile, setConfigImportFile] = useState<File | null>(null);
   const [csvFeedback, setCsvFeedback] = useState<{ type: 'success' | 'error', message: string } | null>(null);
@@ -260,13 +263,37 @@ const App: React.FC = () => {
     const firstThisYear = new Date(now.getFullYear(), 0, 1);
 
     return habits.filter(h => !h.archived).map(h => {
+      if (h.habitType === 'numeric') {
+        const nc = h.numericCompletions || {};
+        const avgInRange = (start: Date, end: Date) => {
+          const s = getLocalDateString(start), e = getLocalDateString(end);
+          const vals = Object.entries(nc).filter(([d]) => d >= s && d <= e).map(([,v]) => v);
+          return vals.length > 0 ? vals.reduce((a,b) => a+b, 0) / vals.length : null;
+        };
+        const isBetter = (curr: number | null, prev: number | null) => {
+          if (curr === null || prev === null) return true;
+          return h.numericDirection === 'max' ? curr >= prev : curr <= prev;
+        };
+        const curWeek = avgInRange(sunThisWeek, now);
+        const prevWeek = avgInRange(sunLastWeek, satLastWeek);
+        const curMonth = avgInRange(firstThisMonth, now);
+        const prevMonth = avgInRange(firstLastMonth, lastLastMonth);
+        const last3M = avgInRange(ninetyDaysAgo, now);
+        const year = avgInRange(firstThisYear, now);
+        return {
+          id: h.id, isNumeric: true,
+          curWeek, prevWeek, weekBetter: isBetter(curWeek, prevWeek),
+          curMonth, prevMonth, monthBetter: isBetter(curMonth, prevMonth),
+          last3M, year
+        };
+      }
       const curWeek = calculateRateInRange(h, sunThisWeek, new Date());
       const prevWeek = calculateRateInRange(h, sunLastWeek, satLastWeek);
       const curMonth = calculateRateInRange(h, firstThisMonth, now);
       const prevMonth = calculateRateInRange(h, firstLastMonth, lastLastMonth);
       const last3M = calculateRateInRange(h, ninetyDaysAgo, now);
       const year = calculateRateInRange(h, firstThisYear, now);
-      return { id: h.id, curWeek, prevWeek, weekBetter: curWeek >= prevWeek, curMonth, prevMonth, monthBetter: curMonth >= prevMonth, last3M, year };
+      return { id: h.id, isNumeric: false, curWeek, prevWeek, weekBetter: curWeek >= prevWeek, curMonth, prevMonth, monthBetter: curMonth >= prevMonth, last3M, year };
     });
   }, [habits]);
 
@@ -281,16 +308,35 @@ const App: React.FC = () => {
     const satTwoWeeksAgo = new Date(sunThisWeek); satTwoWeeksAgo.setDate(satTwoWeeksAgo.getDate() - 8);
 
     return habits.filter(h => !h.archived).map(h => {
+      if (h.habitType === 'numeric') {
+        const nc = h.numericCompletions || {};
+        const avgInRange = (start: Date, end: Date) => {
+          const s = getLocalDateString(start), e = getLocalDateString(end);
+          const vals = Object.entries(nc).filter(([d]) => d >= s && d <= e).map(([,v]) => v);
+          return vals.length > 0 ? +(vals.reduce((a,b) => a+b, 0) / vals.length).toFixed(1) : null;
+        };
+        const allDates = Object.keys(nc).sort();
+        const startDate = allDates.length > 0 ? new Date(allDates[0]) : new Date(h.createdAt);
+        return {
+          id: h.id, isNumeric: true,
+          totalRate: avgInRange(startDate, now),
+          rate90d: avgInRange(ninetyDaysAgo, now),
+          rate30d: avgInRange(thirtyDaysAgo, now),
+          rateTwoWeeksAgo: avgInRange(sunTwoWeeksAgo, satTwoWeeksAgo),
+          ratePrevWeek: avgInRange(sunLastWeek, satLastWeek),
+          rateCurWeek: avgInRange(sunThisWeek, now),
+        };
+      }
       const completions = Object.keys(h.completions).sort();
       const startDate = completions.length > 0 ? new Date(completions[0]) : new Date(h.createdAt);
       return {
-        id: h.id,
+        id: h.id, isNumeric: false,
         totalRate: calculateRateInRange(h, startDate, now),
         rate90d: calculateRateInRange(h, ninetyDaysAgo, now),
         rate30d: calculateRateInRange(h, thirtyDaysAgo, now),
         rateTwoWeeksAgo: calculateRateInRange(h, sunTwoWeeksAgo, satTwoWeeksAgo),
         ratePrevWeek: calculateRateInRange(h, sunLastWeek, satLastWeek),
-        rateCurWeek: calculateRateInRange(h, sunThisWeek, new Date()),
+        rateCurWeek: calculateRateInRange(h, sunThisWeek, now),
       };
     });
   }, [habits]);
@@ -518,6 +564,12 @@ const App: React.FC = () => {
         if (day > daysToShow) return 'future';
         const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
         const date = new Date(year, month - 1, day);
+        if (habit.habitType === 'numeric') {
+          const val = (habit.numericCompletions || {})[dateStr];
+          if (val === undefined) return 'neutral';
+          if (habit.numericGoal === undefined) return 'neutral';
+          return habit.numericDirection === 'max' ? (val >= habit.numericGoal ? 'success' : 'failure') : (val <= habit.numericGoal ? 'success' : 'failure');
+        }
         if (habit.frequency === 'daily') {
           return habit.completions[dateStr] || 'neutral';
         } else if (habit.frequency === 'weekly') {
@@ -536,6 +588,12 @@ const App: React.FC = () => {
           if (keys.some(k => habit.completions[k] === 'failure')) return 'failure';
           return 'neutral';
         }
+      };
+
+      // Para numéricos, función para obtener el valor del día
+      const getNumericValue = (habit: Habit, day: number): number | null => {
+        const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        return (habit.numericCompletions || {})[dateStr] ?? null;
       };
 
       const CELL = 30;
@@ -725,10 +783,37 @@ const App: React.FC = () => {
             }
 
           } else if (status === 'neutral') {
-            ctx.beginPath();
-            ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
-            ctx.fillStyle = '#b8a898';
-            ctx.fill();
+            // Para numéricos con valor, mostrar el número aunque sea neutral
+            if (habit.habitType === 'numeric') {
+              const numVal = getNumericValue(habit, d);
+              if (numVal !== null) {
+                ctx.fillStyle = '#8b7355';
+                ctx.font = `bold 8px 'Courier New', monospace`;
+                ctx.textAlign = 'center';
+                ctx.fillText(String(numVal), cx, cy + 3);
+              } else {
+                ctx.beginPath();
+                ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#b8a898';
+                ctx.fill();
+              }
+            } else {
+              ctx.beginPath();
+              ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+              ctx.fillStyle = '#b8a898';
+              ctx.fill();
+            }
+          }
+
+          // Para numéricos con éxito/fallo, también mostrar el valor encima de las rayas
+          if (habit.habitType === 'numeric' && (status === 'success' || status === 'failure')) {
+            const numVal = getNumericValue(habit, d);
+            if (numVal !== null) {
+              ctx.fillStyle = status === 'success' ? '#1a5c38' : '#7a1a1a';
+              ctx.font = `bold 8px 'Courier New', monospace`;
+              ctx.textAlign = 'center';
+              ctx.fillText(String(numVal), cx, cy + 3);
+            }
           }
         }
       });
@@ -752,16 +837,33 @@ const App: React.FC = () => {
     }
   };
 
+  const handleNumericLog = (id: number, value: number) => {
+    setHabits(prev => prev.map(h => {
+      if (h.id !== id) return h;
+      const newNumericCompletions = { ...(h.numericCompletions || {}), [selectedDate]: value };
+      return { ...h, numericCompletions: newNumericCompletions };
+    }));
+  };
+
   const handleAddHabit = (e: React.FormEvent) => {
     e.preventDefault();
     const idNum = parseInt(newId);
     if (!newName.trim() || isNaN(idNum) || isIdTaken(idNum)) return;
+    if (newHabitType === 'numeric' && !newNumericGoal) return;
     const refNum = newReference ? parseInt(newReference) : undefined;
     const newHabit: Habit = {
-      id: idNum, name: newName, category: selectedTagName, type: 'positive', frequency: newFreq, completions: {}, createdAt: new Date().toISOString(), streak: 0, reference: refNum
+      id: idNum, name: newName, category: selectedTagName, type: 'positive',
+      frequency: newHabitType === 'numeric' ? 'daily' : newFreq,
+      habitType: newHabitType,
+      completions: {}, createdAt: new Date().toISOString(), streak: 0,
+      reference: refNum,
+      numericGoal: newHabitType === 'numeric' ? parseFloat(newNumericGoal) : undefined,
+      numericDirection: newHabitType === 'numeric' ? newNumericDirection : undefined,
     };
     setHabits(prev => [...prev, newHabit]);
-    setNewName(''); setNewReference(''); setIsModalOpen(false);
+    setNewName(''); setNewReference(''); setNewNumericGoal('');
+    setNewHabitType('boolean'); setNewNumericDirection('min');
+    setIsModalOpen(false);
   };
 
   return (
@@ -796,13 +898,28 @@ const App: React.FC = () => {
                 const realIdx = habits.indexOf(h);
                 const prevRealIdx = filteredIdx > 0 ? habits.indexOf(visibleHabits[filteredIdx - 1]) : -1;
                 const nextRealIdx = filteredIdx < visibleHabits.length - 1 ? habits.indexOf(visibleHabits[filteredIdx + 1]) : -1;
-                const curWeek = calculateRateInRange(h, weekDates.sunThisWeek, new Date());
-                const prevWeek = calculateRateInRange(h, weekDates.sunLastWeek, weekDates.satLastWeek);
+                const isNumericHabit = h.habitType === 'numeric';
+                const nc = h.numericCompletions || {};
+                const avgInRange = (start: Date, end: Date) => {
+                  const s = getLocalDateString(start), e = getLocalDateString(end);
+                  const vals = Object.entries(nc).filter(([d]) => d >= s && d <= e).map(([,v]) => v);
+                  return vals.length > 0 ? +(vals.reduce((a,b) => a+b,0) / vals.length).toFixed(1) : 0;
+                };
+                const curWeek = isNumericHabit
+                  ? avgInRange(weekDates.sunThisWeek, new Date())
+                  : calculateRateInRange(h, weekDates.sunThisWeek, new Date());
+                const prevWeek = isNumericHabit
+                  ? avgInRange(weekDates.sunLastWeek, weekDates.satLastWeek)
+                  : calculateRateInRange(h, weekDates.sunLastWeek, weekDates.satLastWeek);
 
                 return (
                   <HabitCard 
-                    key={h.id} habit={h} userTags={userTags} status={getHabitStatusForDate(h, selectedDate)} 
-                    onToggle={handleToggleHabit} onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} 
+                    key={h.id} habit={h} userTags={userTags} status={getHabitStatusForDate(h, selectedDate)}
+                    selectedDate={selectedDate}
+                    todayNumericValue={h.habitType === 'numeric' ? (h.numericCompletions || {})[selectedDate] : undefined}
+                    onToggle={handleToggleHabit}
+                    onNumericLog={handleNumericLog}
+                    onDelete={(id) => setHabits(p => p.filter(x => x.id !== id))} 
                     onEdit={(h) => { setEditingHabit({...h}); setIsEditModalOpen(true); }}
                     onLogPast={(h) => { setSelectedHabitForPastDate(h); setIsPastDateModalOpen(true); }}
                     onArchive={handleArchiveHabit}
@@ -1001,16 +1118,41 @@ const App: React.FC = () => {
                     const tagData = userTags.find(t => t.name === h.category);
                     const theme = getTagStyles(h.category, tagData?.colorIndex);
 
+                    if (d.isNumeric) {
+                      // Celda numérica: compara según dirección
+                      const numCell = (val: number | null, ref: number | null) => {
+                        if (val === null) return "bg-gray-50 text-gray-400";
+                        if (ref === null) return "bg-gray-50 text-gray-600";
+                        const good = h.numericDirection === 'max' ? val >= ref : val <= ref;
+                        return good ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+                      };
+                      const fmt = (v: number | null) => v === null ? '—' : String(v);
+                      return (
+                        <tr key={h.id} className="bg-white border-2 border-black/5 rounded-2xl shadow-sm overflow-hidden">
+                          <td className={`px-4 py-4 font-bold text-sm border-y-2 border-l-2 border-black/5 rounded-l-2xl sticky left-0 z-10 ${theme.tag}`}>
+                            {h.name} <span className="text-[9px] opacity-60">{h.numericDirection === 'max' ? '↑' : '↓'}</span>
+                          </td>
+                          <td className="px-4 py-4 text-center font-black text-xs border-y-2 border-black/5 opacity-40">{h.numericGoal ?? '—'}</td>
+                          <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${numCell(d.totalRate as any, h.numericGoal ?? null)}`}>{fmt(d.totalRate as any)}</td>
+                          <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${numCell(d.rate90d as any, d.totalRate as any)}`}>{fmt(d.rate90d as any)}</td>
+                          <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${numCell(d.rate30d as any, d.rate90d as any)}`}>{fmt(d.rate30d as any)}</td>
+                          <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${numCell(d.rateTwoWeeksAgo as any, d.rate30d as any)}`}>{fmt(d.rateTwoWeeksAgo as any)}</td>
+                          <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${numCell(d.ratePrevWeek as any, d.rateTwoWeeksAgo as any)}`}>{fmt(d.ratePrevWeek as any)}</td>
+                          <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-r-2 border-black/5 rounded-r-2xl ${numCell(d.rateCurWeek as any, d.ratePrevWeek as any)}`}>{fmt(d.rateCurWeek as any)}</td>
+                        </tr>
+                      );
+                    }
+
                     return (
                       <tr key={h.id} className="bg-white border-2 border-black/5 rounded-2xl shadow-sm overflow-hidden">
                         <td className={`px-4 py-4 font-bold text-sm border-y-2 border-l-2 border-black/5 rounded-l-2xl sticky left-0 z-10 ${theme.tag}`}>{h.name}</td>
                         <td className="px-4 py-4 text-center font-black text-xs border-y-2 border-black/5 opacity-40">{h.reference !== undefined ? `${h.reference}%` : '—'}</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.totalRate, h.reference)}`}>{d.totalRate}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.rate90d, d.totalRate)}`}>{d.rate90d}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.rate30d, d.rate90d)}`}>{d.rate30d}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.rateTwoWeeksAgo, d.rate30d)}`}>{d.rateTwoWeeksAgo}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.ratePrevWeek, d.rateTwoWeeksAgo)}`}>{d.ratePrevWeek}%</td>
-                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-r-2 border-black/5 rounded-r-2xl ${getCellStyles(d.rateCurWeek, d.ratePrevWeek)}`}>{d.rateCurWeek}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.totalRate as number, h.reference)}`}>{d.totalRate}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.rate90d as number, d.totalRate as number)}`}>{d.rate90d}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.rate30d as number, d.rate90d as number)}`}>{d.rate30d}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.rateTwoWeeksAgo as number, d.rate30d as number)}`}>{d.rateTwoWeeksAgo}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-black/5 ${getCellStyles(d.ratePrevWeek as number, d.rateTwoWeeksAgo as number)}`}>{d.ratePrevWeek}%</td>
+                        <td className={`px-4 py-4 text-center font-black text-sm border-y-2 border-r-2 border-black/5 rounded-r-2xl ${getCellStyles(d.rateCurWeek as number, d.ratePrevWeek as number)}`}>{d.rateCurWeek}%</td>
                       </tr>
                     );
                   })}
@@ -1115,24 +1257,49 @@ const App: React.FC = () => {
             <div className="space-y-5">
               <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">ID Sheet (Manual)</p><input required type="number" value={newId} onChange={e => setNewId(e.target.value)} className={`w-full px-6 py-4 rounded-2xl border font-bold ${isIdTaken(parseInt(newId)) ? 'border-rose-500 bg-rose-50' : 'bg-white border-black/5'}`} placeholder="ID..." />{isIdTaken(parseInt(newId)) && <p className="text-[9px] text-rose-500 font-bold ml-2">Este ID ya está en uso</p>}</div>
               <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Nombre</p><input required value={newName} onChange={e => setNewName(e.target.value)} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" placeholder="Hábito..." /></div>
-              <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Referencia % (Opcional)</p><input type="number" min="0" max="100" value={newReference} onChange={e => setNewReference(e.target.value)} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold" placeholder="0-100..." /></div>
-              <div className="grid grid-cols-3 gap-2">{['daily', 'weekly', 'monthly'].map(f => (<button key={f} type="button" onClick={() => setNewFreq(f as any)} className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 ${newFreq === f ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5'}`}>{f}</button>))}</div>
+
+              {/* Tipo de hábito */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase opacity-40 ml-2">Tipo</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setNewHabitType('boolean')} className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 ${newHabitType === 'boolean' ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5'}`}>✓ Sí / No</button>
+                  <button type="button" onClick={() => setNewHabitType('numeric')} className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 ${newHabitType === 'numeric' ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5'}`}>123 Numérico</button>
+                </div>
+              </div>
+
+              {newHabitType === 'numeric' ? (
+                <>
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase opacity-40 ml-2">Objetivo (obligatorio)</p>
+                    <input required type="number" value={newNumericGoal} onChange={e => setNewNumericGoal(e.target.value)} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold" placeholder="Valor objetivo..." />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase opacity-40 ml-2">Dirección</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => setNewNumericDirection('min')} className={`py-3 rounded-xl text-sm font-black border-2 ${newNumericDirection === 'min' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-black/5'}`}>↓ Minimizar</button>
+                      <button type="button" onClick={() => setNewNumericDirection('max')} className={`py-3 rounded-xl text-sm font-black border-2 ${newNumericDirection === 'max' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-black/5'}`}>↑ Maximizar</button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Referencia % (Opcional)</p><input type="number" min="0" max="100" value={newReference} onChange={e => setNewReference(e.target.value)} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold" placeholder="0-100..." /></div>
+                  <div className="grid grid-cols-3 gap-2">{['daily', 'weekly', 'monthly'].map(f => (<button key={f} type="button" onClick={() => setNewFreq(f as any)} className={`py-3 rounded-xl text-[10px] font-black uppercase border-2 ${newFreq === f ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5'}`}>{f}</button>))}</div>
+                </>
+              )}
+
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-2">Categoría</p>
                 <div className="flex flex-wrap gap-2">
                   {userTags.map(tag => (
-                    <button
-                      key={tag.name}
-                      type="button"
-                      onClick={() => setSelectedTagName(tag.name)}
-                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${selectedTagName === tag.name ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5 text-black/40'}`}
-                    >
+                    <button key={tag.name} type="button" onClick={() => setSelectedTagName(tag.name)}
+                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${selectedTagName === tag.name ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5 text-black/40'}`}>
                       {tag.name}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="flex gap-4 pt-6"><button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 font-black uppercase text-[10px] opacity-40">Cerrar</button><button type="submit" disabled={isIdTaken(parseInt(newId))} className="flex-[2] py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg disabled:opacity-50">Crear</button></div>
+              <div className="flex gap-4 pt-6"><button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 font-black uppercase text-[10px] opacity-40">Cerrar</button><button type="submit" disabled={isIdTaken(parseInt(newId)) || (newHabitType === 'numeric' && !newNumericGoal)} className="flex-[2] py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg disabled:opacity-50">Crear</button></div>
             </div>
           </form>
         </div>
@@ -1142,24 +1309,39 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
           <form onSubmit={(e) => {
             e.preventDefault();
-            setHabits(prev => prev.map(h => {
-              if (h.id === selectedHabitForPastDate.id) {
+            if (selectedHabitForPastDate.habitType === 'numeric') {
+              const val = parseFloat((e.target as any).numericPastValue?.value);
+              if (!isNaN(val)) {
+                setHabits(prev => prev.map(h => {
+                  if (h.id !== selectedHabitForPastDate.id) return h;
+                  return { ...h, numericCompletions: { ...(h.numericCompletions || {}), [pastDateToLog]: val } };
+                }));
+              }
+            } else {
+              setHabits(prev => prev.map(h => {
+                if (h.id !== selectedHabitForPastDate.id) return h;
                 const nC = updateHabitCompletions(h, pastDateToLog, pastStatusToLog);
                 return { ...h, completions: nC };
-              }
-              return h;
-            }));
+              }));
+            }
             setIsPastDateModalOpen(false);
           }} className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
             <h3 className="text-3xl font-black mb-2 text-center">Registro Pasado</h3>
             <p className="text-[10px] text-center font-black uppercase opacity-40 mb-8">{selectedHabitForPastDate.name}</p>
             <div className="space-y-5">
               <input type="date" required value={pastDateToLog} max={todayStr} onChange={e => setPastDateToLog(e.target.value)} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold" />
-              <div className="grid grid-cols-3 gap-2">
-                <button type="button" onClick={() => setPastStatusToLog('success')} className={`py-4 rounded-xl font-black uppercase text-[10px] border-2 ${pastStatusToLog === 'success' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-black/5'}`}>Éxito</button>
-                <button type="button" onClick={() => setPastStatusToLog('failure')} className={`py-4 rounded-xl font-black uppercase text-[10px] border-2 ${pastStatusToLog === 'failure' ? 'bg-rose-600 border-rose-600 text-white' : 'bg-white border-black/5'}`}>Fallo</button>
-                <button type="button" onClick={() => setPastStatusToLog('neutral')} className={`py-4 rounded-xl font-black uppercase text-[10px] border-2 ${pastStatusToLog === 'neutral' ? 'bg-gray-200 border-gray-200 text-gray-700' : 'bg-white border-black/5'}`}>Borrar</button>
-              </div>
+              {selectedHabitForPastDate.habitType === 'numeric' ? (
+                <input name="numericPastValue" type="number" step="any"
+                  defaultValue={(selectedHabitForPastDate.numericCompletions || {})[pastDateToLog] ?? ''}
+                  className="w-full px-6 py-4 rounded-2xl border bg-white font-bold text-center text-xl"
+                  placeholder={`Valor (obj: ${selectedHabitForPastDate.numericGoal})`} />
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  <button type="button" onClick={() => setPastStatusToLog('success')} className={`py-4 rounded-xl font-black uppercase text-[10px] border-2 ${pastStatusToLog === 'success' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-black/5'}`}>Éxito</button>
+                  <button type="button" onClick={() => setPastStatusToLog('failure')} className={`py-4 rounded-xl font-black uppercase text-[10px] border-2 ${pastStatusToLog === 'failure' ? 'bg-rose-600 border-rose-600 text-white' : 'bg-white border-black/5'}`}>Fallo</button>
+                  <button type="button" onClick={() => setPastStatusToLog('neutral')} className={`py-4 rounded-xl font-black uppercase text-[10px] border-2 ${pastStatusToLog === 'neutral' ? 'bg-gray-200 border-gray-200 text-gray-700' : 'bg-white border-black/5'}`}>Borrar</button>
+                </div>
+              )}
               <button type="submit" className="w-full py-5 bg-orange-700 text-white rounded-3xl font-black shadow-lg">Guardar Registro</button>
               <button type="button" onClick={() => setIsPastDateModalOpen(false)} className="w-full py-4 font-black uppercase text-[10px] opacity-40 text-center">Cancelar</button>
             </div>
@@ -1184,7 +1366,10 @@ const App: React.FC = () => {
                   <div key={item.h.id} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-black/5">
                     <span className="font-bold text-sm">{item.h.name}</span>
                     <span className="text-[10px] font-black opacity-40">
-                      ({item.data!.prevMonth}% → {item.data!.curMonth}%)
+                      ({item.data!.isNumeric
+                        ? `${item.data!.prevMonth ?? '—'} → ${item.data!.curMonth ?? '—'}`
+                        : `${item.data!.prevMonth}% → ${item.data!.curMonth}%`
+                      })
                     </span>
                   </div>
                 ))}
@@ -1196,22 +1381,36 @@ const App: React.FC = () => {
 
       {isEditModalOpen && editingHabit && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm p-0">
-          <form onSubmit={(e) => { e.preventDefault(); setHabits(prev => prev.map(h => h.id === editingHabit.id ? editingHabit : h)); setIsEditModalOpen(false); }} className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl">
+          <form onSubmit={(e) => { e.preventDefault(); setHabits(prev => prev.map(h => h.id === editingHabit.id ? editingHabit : h)); setIsEditModalOpen(false); }} className="w-full max-w-md rounded-t-[48px] p-10 bg-[#fffcf5] animate-in slide-in-from-bottom duration-500 shadow-2xl overflow-y-auto max-h-[90vh]">
             <h3 className="text-3xl font-black mb-8 text-center">Editar Hábito</h3>
             <div className="space-y-5">
-              <div className="space-y-2 opacity-50"><p className="text-[10px] font-black uppercase ml-2">ID Sheet (No editable)</p><div className="w-full px-6 py-4 rounded-2xl border bg-gray-100 font-bold text-sm">{editingHabit.id}</div></div>
+              <div className="space-y-2 opacity-50"><p className="text-[10px] font-black uppercase ml-2">ID (No editable)</p><div className="w-full px-6 py-4 rounded-2xl border bg-gray-100 font-bold text-sm">{editingHabit.id}</div></div>
               <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Nombre</p><input required value={editingHabit.name} onChange={e => setEditingHabit({...editingHabit, name: e.target.value})} className="w-full px-6 py-5 rounded-3xl border bg-white font-bold" /></div>
-              <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Referencia % (Opcional)</p><input type="number" min="0" max="100" value={editingHabit.reference || ''} onChange={e => setEditingHabit({...editingHabit, reference: e.target.value ? parseInt(e.target.value) : undefined})} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold" placeholder="0-100..." /></div>
+
+              {editingHabit.habitType === 'numeric' ? (
+                <>
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase opacity-40 ml-2">Objetivo</p>
+                    <input required type="number" value={editingHabit.numericGoal ?? ''} onChange={e => setEditingHabit({...editingHabit, numericGoal: e.target.value ? parseFloat(e.target.value) : undefined})} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold" placeholder="Valor objetivo..." />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase opacity-40 ml-2">Dirección</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => setEditingHabit({...editingHabit, numericDirection: 'min'})} className={`py-3 rounded-xl text-sm font-black border-2 ${editingHabit.numericDirection === 'min' ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-black/5'}`}>↓ Minimizar</button>
+                      <button type="button" onClick={() => setEditingHabit({...editingHabit, numericDirection: 'max'})} className={`py-3 rounded-xl text-sm font-black border-2 ${editingHabit.numericDirection === 'max' ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-black/5'}`}>↑ Maximizar</button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-2"><p className="text-[10px] font-black uppercase opacity-40 ml-2">Referencia % (Opcional)</p><input type="number" min="0" max="100" value={editingHabit.reference || ''} onChange={e => setEditingHabit({...editingHabit, reference: e.target.value ? parseInt(e.target.value) : undefined})} className="w-full px-6 py-4 rounded-2xl border bg-white font-bold" placeholder="0-100..." /></div>
+              )}
+
               <div className="space-y-2">
                 <p className="text-[10px] font-black uppercase opacity-40 ml-2">Categoría</p>
                 <div className="flex flex-wrap gap-2">
                   {userTags.map(tag => (
-                    <button
-                      key={tag.name}
-                      type="button"
-                      onClick={() => setEditingHabit({...editingHabit, category: tag.name})}
-                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${editingHabit.category === tag.name ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5 text-black/40'}`}
-                    >
+                    <button key={tag.name} type="button" onClick={() => setEditingHabit({...editingHabit, category: tag.name})}
+                      className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase border-2 transition-all ${editingHabit.category === tag.name ? 'bg-orange-700 border-orange-700 text-white' : 'bg-white border-black/5 text-black/40'}`}>
                       {tag.name}
                     </button>
                   ))}
