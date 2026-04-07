@@ -1025,13 +1025,25 @@ const App: React.FC = () => {
                         <div className={`rounded-3xl p-4 shadow-sm border-2 ${data.weekBetter ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
                           <p className="text-[9px] font-black uppercase mb-1 opacity-40">Semana</p>
                           <div className="flex items-baseline gap-2">
-                            <span className={`text-2xl font-black ${data.weekBetter ? 'text-emerald-700' : 'text-rose-700'}`}>{data.curWeek}%</span>
-                            <span className="text-[10px] font-bold opacity-40">vs {data.prevWeek}%</span>
+                            <span className={`text-2xl font-black ${data.weekBetter ? 'text-emerald-700' : 'text-rose-700'}`}>
+                              {data.isNumeric
+                                ? (data.curWeek !== null ? Number(data.curWeek).toFixed(1) : '—')
+                                : `${data.curWeek}%`}
+                            </span>
+                            <span className="text-[10px] font-bold opacity-40">
+                              vs {data.isNumeric
+                                ? (data.prevWeek !== null ? Number(data.prevWeek).toFixed(1) : '—')
+                                : `${data.prevWeek}%`}
+                            </span>
                           </div>
                         </div>
                         <div className={`rounded-3xl p-4 shadow-sm border-2 ${data.monthBetter ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
                           <p className="text-[9px] font-black uppercase mb-1 opacity-40">Mes</p>
-                          <span className={`text-2xl font-black ${data.monthBetter ? 'text-emerald-700' : 'text-rose-700'}`}>{data.curMonth}%</span>
+                          <span className={`text-2xl font-black ${data.monthBetter ? 'text-emerald-700' : 'text-rose-700'}`}>
+                            {data.isNumeric
+                              ? (data.curMonth !== null ? Number(data.curMonth).toFixed(1) : '—')
+                              : `${data.curMonth}%`}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1041,11 +1053,19 @@ const App: React.FC = () => {
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-white/50 border border-black/5 rounded-2xl p-3 flex flex-col">
                             <span className="text-[8px] font-black uppercase opacity-40">Últimos 3 meses</span>
-                            <span className="text-xl font-black text-orange-950">{data.last3M}%</span>
+                            <span className="text-xl font-black text-orange-950">
+                              {data.isNumeric
+                                ? (data.last3M !== null ? Number(data.last3M).toFixed(1) : '—')
+                                : `${data.last3M}%`}
+                            </span>
                           </div>
                           <div className="bg-white/50 border border-black/5 rounded-2xl p-3 flex flex-col">
                             <span className="text-[8px] font-black uppercase opacity-40">Año Actual</span>
-                            <span className="text-xl font-black text-orange-950">{data.year}%</span>
+                            <span className="text-xl font-black text-orange-950">
+                              {data.isNumeric
+                                ? (data.year !== null ? Number(data.year).toFixed(1) : '—')
+                                : `${data.year}%`}
+                            </span>
                           </div>
                         </div>
 
