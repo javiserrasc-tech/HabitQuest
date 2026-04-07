@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Habit, UserTag, HabitStatus } from '../types';
-import { getTagStyles, Icons } from '../constants';
+import { getTagStyles, Icons, COLOR_PALETTE } from '../constants';
 
 interface HabitCardProps {
   habit: Habit;
@@ -43,6 +43,31 @@ const HabitCard: React.FC<HabitCardProps> = ({
 
   const tagData = userTags.find(t => t.name === habit.category);
   const theme = getTagStyles(habit.category, tagData?.colorIndex);
+  const colorIndex = tagData?.colorIndex ?? 0;
+  const paletteColor = COLOR_PALETTE[colorIndex % COLOR_PALETTE.length];
+
+  // Franja lateral y badge según frecuencia
+  const isWeekly = habit.frequency === 'weekly';
+  const isMonthly = habit.frequency === 'monthly';
+  const isNonDaily = isWeekly || isMonthly;
+
+  // Franja lateral izquierda: semanal = sólida, mensual = doble línea
+  const leftAccent = isWeekly
+    ? `before:content-[''] before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:rounded-full before:${paletteColor.bg}`
+    : isMonthly
+    ? `before:content-[''] before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:rounded-full before:${paletteColor.bg} after:content-[''] after:absolute after:left-2 after:top-3 after:bottom-3 after:w-0.5 after:rounded-full after:${paletteColor.bg} after:opacity-50`
+    : '';
+
+  // Badge de frecuencia con estilo según tipo
+  const freqBadge = () => {
+    if (habit.frequency === 'daily') {
+      return <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border border-black/5 bg-black/5 text-black/40 shrink-0">Diario</span>;
+    }
+    if (isWeekly) {
+      return <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-lg shrink-0 ${paletteColor.tag}`}>· Semanal ·</span>;
+    }
+    return <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border-2 shrink-0 bg-white ${paletteColor.tag}`}>◈ Mensual ◈</span>;
+  };
 
   const isNumeric = habit.habitType === 'numeric';
 
@@ -100,16 +125,14 @@ const HabitCard: React.FC<HabitCardProps> = ({
       : theme.card + ' border-transparent';
 
   return (
-    <div className={`relative rounded-[32px] p-5 shadow-sm border-2 transition-all duration-300 ${cardBorder}`}>
-      <div className="flex flex-col gap-4">
+    <div className={`relative rounded-[32px] p-5 shadow-sm border-2 transition-all duration-300 overflow-hidden ${cardBorder} ${isNonDaily ? leftAccent : ''}`}>
+      <div className={`flex flex-col gap-4 ${isNonDaily ? 'pl-3' : ''}`}>
         {/* Top row: tags + actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
             <span className="text-[9px] font-black text-black/20 bg-black/5 px-2 py-0.5 rounded-md">#{habit.id}</span>
             <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border shrink-0 ${theme.tag}`}>{habit.category}</span>
-            <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-lg border border-black/5 bg-black/5 text-black/40 shrink-0">
-              {habit.frequency === 'daily' ? 'Diario' : habit.frequency === 'weekly' ? 'Semanal' : 'Mensual'}
-            </span>
+            {freqBadge()}
             {isNumeric && (
               <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg border shrink-0 ${habit.numericDirection === 'max' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-blue-50 border-blue-100 text-blue-700'}`}>
                 {habit.numericDirection === 'max' ? '↑' : '↓'} {habit.numericGoal}
